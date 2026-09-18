@@ -1,0 +1,34 @@
+{
+  "name": "mercury-ops",
+  "displayName": "Mercury Ops (write)",
+  "version": "1.0.0",
+  "description": "Complementary Mercury Banking write MCP for Books money movement (send, transfer, recipients, post-send category). Keep stock Mercury MCP for reads. Do not publish to Marketplace.",
+  "author": {
+    "name": "Oberon"
+  },
+  "homepage": "https://github.com/ergofobe/mercury-ops-connector",
+  "repository": "https://github.com/ergofobe/mercury-ops-connector",
+  "license": "MIT",
+  "keywords": [
+    "mercury",
+    "banking",
+    "send-money",
+    "transfer",
+    "recipients",
+    "mcp"
+  ],
+  "logo": "assets/logo.svg",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "MERCURY_API_TOKEN": {
+        "type": "string",
+        "title": "Mercury API token",
+        "description": "Token from Mercury dashboard → Settings → Tokens. Include the secret-token: prefix. Send Money (createTransaction) needs an IP whitelist; request-send-money / request-transfer-money use the approval queue and may not. Never commit or paste this into chat."
+      }
+    },
+    "required": [
+      "MERCURY_API_TOKEN"
+    ]
+  }
+}

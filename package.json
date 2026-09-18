@@ -1,0 +1,29 @@
+{
+  "name": "mercury-ops",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cursor plugin: Mercury Banking write ops (send/transfer/recipient/categorize) complementary to stock Mercury MCP",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "mercury-ops": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "cursor",
+    "plugin",
+    "mercury",
+    "banking",
+    "mcp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ergofobe/mercury-ops-connector.git"
+  }
+}
