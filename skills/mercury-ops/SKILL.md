@@ -4,8 +4,9 @@ description: >
   Mercury Ops — API-token Mercury org banking MCP: accounts,
   transactions, recipients, create recipient, post-send category, and
   spend/transfer tools. Distinct from the stock Mercury OAuth MCP.
-  Never call spend/transfer without Jim’s explicit confirmation.
-  Execute also requires MERCURY_OPS_ALLOW_SPEND=1 (default off).
+  Env flag alone is not Jim green. Never call spend/transfer without
+  Jim’s explicit green for that specific action, even if
+  MERCURY_OPS_ALLOW_SPEND=1. Flag default off (execute refuse).
   Prefer request_* when proving. No live money in tests. Approval
   lives OUTSIDE this connector. Phase B accounting extras — do not
   invent those tools here.
@@ -22,12 +23,12 @@ description: >
 
 Spend tools (`send_money`, `request_send_money`, `transfer_money`, `request_transfer_money`) **appear in `tools/list`**. Do not treat listing as permission to execute.
 
-1. **Flag:** `MERCURY_OPS_ALLOW_SPEND` must be `1` (or true/yes/on). If execute fails with a disabled-until-flag error, stop. Do not retry. Do not ask to flip the flag unless Jim already decided to enable spend.
-2. **Jim’s explicit confirmation:** **never** call send/transfer unless Jim has explicitly greened that movement for this task. Approval lives **outside** this connector.
+1. **Flag:** `MERCURY_OPS_ALLOW_SPEND` must be `1` (or true/yes/on) or execute refuses. If execute fails with a disabled-until-flag error, stop. Do not retry. Do not ask to flip the flag unless Jim already decided to enable spend.
+2. **Jim green for that specific action:** even with the flag on, **never** call send/transfer unless Jim has explicitly greened **that** action. The env flag alone is **not** Jim green. Both are required during oversight, until patterns are proven. Approval lives **outside** this connector.
 
 If either gate fails: refuse and continue with reads / non-spend writes only.
 
-When Jim has greened spend **and** the flag is on, **prefer `request_*`** (Mercury approval queue) over immediate `send_money` / `transfer_money`, especially when proving a path. No live money movement in tests.
+When **both** gates pass, **prefer `request_*`** (Mercury approval queue) over immediate `send_money` / `transfer_money`, especially when proving a path. No live money movement in tests.
 
 This connector does not approve, reject, or auto-release queued payments.
 
@@ -47,7 +48,7 @@ This connector does not approve, reject, or auto-release queued payments.
 
 1. `list_accounts` / `get_account` for balances and ids.
 2. `list_recipients` / `get_recipient`. Create a payee with `create_recipient` if needed.
-3. Stop. Do **not** send or transfer without Jim’s explicit confirmation **and** `MERCURY_OPS_ALLOW_SPEND=1`.
+3. Stop. Do **not** send or transfer unless `MERCURY_OPS_ALLOW_SPEND=1` **and** Jim greened **that specific** action. Flag on ≠ permission.
 4. If both gates pass: prefer `request_send_money` / `request_transfer_money` with `idempotencyKey`. Then `update_transaction_category` if a transaction id exists.
 5. Confirm with `get_transaction` / `list_transactions` or the Mercury dashboard.
 

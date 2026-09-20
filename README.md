@@ -20,7 +20,7 @@ The stock OAuth plugin cannot see the API-token org. Keep both if you need both 
 Spend tools are **always in `tools/list`** (full capability ships). Execute is **off by default**.
 
 1. **Execute refuse:** `MERCURY_OPS_ALLOW_SPEND` unset/false → `tools/call` returns a clear error (no Mercury request), e.g. *Spend tools disabled until MERCURY_OPS_ALLOW_SPEND=1 and operator has Jim’s explicit green.* Set to `1` / `true` / `yes` / `on` to allow execute.
-2. **Jim green:** never call send/transfer unless Jim has explicitly confirmed that movement. Prefer `request_*` when proving a write path. Approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
+2. **Jim green for that specific action:** even when the flag is on, **do not send or transfer** unless Jim has explicitly greened **that** send/transfer. The env flag alone is **not** Jim green. Both are required during oversight, until patterns are proven. Prefer `request_*` when proving a path. Approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
 
 Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_transfer_money`. No live money movement in tests.
 
