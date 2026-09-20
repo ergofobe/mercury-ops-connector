@@ -7,7 +7,47 @@ import { createMercuryClient } from "./mercury.js";
 import { missingTokenVars, safeErrorMessage } from "./secrets.js";
 
 export const PROTOCOL_VERSION = "2025-03-26";
-export const SERVER_INFO = { name: "mercury-ops", version: "1.1.0" };
+export const SERVER_INFO = { name: "mercury-ops", version: "1.2.0" };
+
+/** Money-moving tools. Implemented, but gated off until Jim sets MERCURY_OPS_ALLOW_SPEND. */
+export const SPEND_TOOL_NAMES = [
+  "send_money",
+  "request_send_money",
+  "transfer_money",
+  "request_transfer_money",
+];
+
+export const SPEND_FLAG_VAR = "MERCURY_OPS_ALLOW_SPEND";
+
+const SPEND_TOOL_SET = new Set(SPEND_TOOL_NAMES);
+
+/**
+ * True only for 1 / true / yes / on (case-insensitive). Unset, 0, false → off.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function isSpendAllowed(env = process.env) {
+  const raw = String(env[SPEND_FLAG_VAR] ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+/**
+ * @param {string} [name]
+ */
+export function spendDisabledMessage(name) {
+  const tool = name ? `${name} is` : "Spend tools are";
+  return `${tool} disabled until Jim enables ${SPEND_FLAG_VAR}=1. Human approval lives outside this connector.`;
+}
+
+/**
+ * tools/list surface: hide spend tools when the flag is off.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function advertisedTools(env = process.env) {
+  if (isSpendAllowed(env)) return TOOL_DEFS;
+  return TOOL_DEFS.filter((tool) => !SPEND_TOOL_SET.has(tool.name));
+}
 
 const PURPOSE_SCHEMA = {
   type: "object",
@@ -207,7 +247,7 @@ export const TOOL_DEFS = [
   {
     name: "send_money",
     description:
-      "POST /account/{accountId}/transactions (createTransaction). Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money unless an immediate send is explicitly authorized. Discover Oforica account/recipient ids with list_accounts / list_recipients on this plugin (stock Mercury OAuth is OG Holdings-only). Jim/agent approval gates live OUTSIDE this connector.",
+      "POST /account/{accountId}/transactions (createTransaction). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1 (Jim must enable spend). Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money. Human approval lives OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -241,7 +281,7 @@ export const TOOL_DEFS = [
   {
     name: "request_send_money",
     description:
-      "POST /account/{accountId}/request-send-money. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Request-send-money uses the approval queue and may not need an IP whitelist. Prefer this over send_money. Approval decisions are made in Mercury / by Jim — not by this connector. This plugin does not wrap listSendMoneyApprovalRequests.",
+      "POST /account/{accountId}/request-send-money. GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Prefer this over send_money when spend is enabled. Approval decisions are made in Mercury / by Jim — not by this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -269,7 +309,7 @@ export const TOOL_DEFS = [
   {
     name: "transfer_money",
     description:
-      "POST /transfer (createInternalTransfer). Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers; category on create does not apply the same way. Use list_accounts on this plugin for Oforica account ids and balances.",
+      "POST /transfer (createInternalTransfer). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers.",
     inputSchema: {
       type: "object",
       properties: {
@@ -290,7 +330,7 @@ export const TOOL_DEFS = [
   {
     name: "request_transfer_money",
     description:
-      "POST /request-transfer (requestTransferMoney). Queues an internal transfer for Mercury dashboard approval. Same fields as transfer_money. May not need an IP whitelist. Approval gates live OUTSIDE this connector.",
+      "POST /request-transfer (requestTransferMoney). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues an internal transfer for Mercury dashboard approval. Same fields as transfer_money. Approval gates live OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -428,6 +468,9 @@ export function createToolRunner({
    * @param {Record<string, unknown>} [args]
    */
   return async function runTool(name, args = {}) {
+    if (SPEND_TOOL_SET.has(name) && !isSpendAllowed(env)) {
+      throw new Error(spendDisabledMessage(name));
+    }
     switch (name) {
       case "list_accounts":
         return mercury.listAccounts(args);
@@ -497,11 +540,17 @@ export function createMessageHandler({ runTool, env = process.env } = {}) {
         return isNotification ? null : result(message, {});
       }
       if (message.method === "tools/list") {
-        return result(message, { tools: TOOL_DEFS });
+        return result(message, { tools: advertisedTools(env) });
       }
       if (message.method === "tools/call") {
         const name = message.params && message.params.name;
         const args = (message.params && message.params.arguments) || {};
+        if (SPEND_TOOL_SET.has(name) && !isSpendAllowed(env)) {
+          return result(message, {
+            content: [{ type: "text", text: spendDisabledMessage(name) }],
+            isError: true,
+          });
+        }
         try {
           const value = await dispatch(name, args);
           return result(message, {

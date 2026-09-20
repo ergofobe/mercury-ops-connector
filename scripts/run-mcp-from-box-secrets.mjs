@@ -8,7 +8,8 @@
  * OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN here so box secrets can use
  * the org-scoped name. Never print either value.
  *
- * Do **not** Marketplace-publish. Stock Cursor Mercury OAuth stays
+ * Spend stays off unless MERCURY_OPS_ALLOW_SPEND=1 (Jim enable).
+ * Do **not** Marketplace-publish. Stock Mercury OAuth stays
  * OG Holdings-only; this process is the Oforica API-token org.
  *
  * Usage:

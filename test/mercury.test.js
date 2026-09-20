@@ -29,7 +29,7 @@ const CATEGORY = "55555555-5555-5555-5555-555555555555";
 function mockClient(respond) {
   /** @type {{ url: string, init: RequestInit }[]} */
   const calls = [];
-  const env = { MERCURY_API_TOKEN: TOKEN };
+  const env = { MERCURY_API_TOKEN: TOKEN, MERCURY_OPS_ALLOW_SPEND: "1" };
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
     if (respond) return respond(url, init, calls);
@@ -237,6 +237,52 @@ describe("request_transfer_money request shape", () => {
     assert.equal(inspected.body.amount, 15.01);
     assert.equal(inspected.body.idempotencyKey, "req-xfer-1");
     assertBearerAuth(inspected, calls);
+  });
+});
+
+describe("non-spend writes without MERCURY_OPS_ALLOW_SPEND", () => {
+  it("still POSTs create_recipient when spend is unset", async () => {
+    /** @type {{ url: string, init: RequestInit }[]} */
+    const calls = [];
+    const runTool = createToolRunner({
+      env: { MERCURY_API_TOKEN: TOKEN },
+      fetchImpl: async (url, init = {}) => {
+        calls.push({ url: String(url), init });
+        return /** @type {Response} */ ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ id: "rec-ok" }),
+        });
+      },
+    });
+    await runTool("create_recipient", {
+      name: "Acme",
+      emails: ["ap@example.com"],
+    });
+    assert.equal(inspectMercuryCall(calls[0]).path, "/recipients");
+    assert.equal(inspectMercuryCall(calls[0]).method, "POST");
+  });
+
+  it("still PATCHes update_transaction_category when spend is unset", async () => {
+    /** @type {{ url: string, init: RequestInit }[]} */
+    const calls = [];
+    const runTool = createToolRunner({
+      env: { MERCURY_API_TOKEN: TOKEN },
+      fetchImpl: async (url, init = {}) => {
+        calls.push({ url: String(url), init });
+        return /** @type {Response} */ ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ id: TXN }),
+        });
+      },
+    });
+    await runTool("update_transaction_category", {
+      transactionId: TXN,
+      categoryId: CATEGORY,
+    });
+    assert.equal(inspectMercuryCall(calls[0]).method, "PATCH");
+    assert.equal(inspectMercuryCall(calls[0]).path, `/transaction/${TXN}`);
   });
 });
 
@@ -497,7 +543,7 @@ describe("validation and oversize", () => {
     /** @type {{ url: string, init: RequestInit }[]} */
     const calls = [];
     const runTool = createToolRunner({
-      env: { MERCURY_API_TOKEN: BARE_TOKEN },
+      env: { MERCURY_API_TOKEN: BARE_TOKEN, MERCURY_OPS_ALLOW_SPEND: "1" },
       fetchImpl: async (url, init = {}) => {
         calls.push({ url: String(url), init });
         return /** @type {Response} */ ({

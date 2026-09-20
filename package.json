@@ -1,8 +1,8 @@
 {
   "name": "mercury-ops",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Cursor plugin: Oforica-scoped Mercury Banking read+write MCP (API token REST); complementary to stock OG Holdings OAuth Mercury MCP",
+  "description": "Stdio MCP: Oforica-scoped Mercury Banking reads + gated spend (API token REST). Complementary to stock OG Holdings OAuth Mercury MCP.",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -15,11 +15,11 @@
     "test": "node --test test/*.test.js"
   },
   "keywords": [
-    "cursor",
-    "plugin",
     "mercury",
+    "oforica",
     "banking",
-    "mcp"
+    "mcp",
+    "stdio"
   ],
   "license": "MIT",
   "repository": {

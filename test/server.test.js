@@ -1,14 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  advertisedTools,
   createMessageHandler,
   createStdioParser,
   createToolRunner,
+  isSpendAllowed,
   SERVER_INFO,
+  SPEND_TOOL_NAMES,
   TOOL_DEFS,
 } from "../src/server.js";
 
-const TOOL_NAMES = [
+const ALWAYS_ON_TOOL_NAMES = [
   "create_recipient",
   "get_account",
   "get_recipient",
@@ -17,42 +20,52 @@ const TOOL_NAMES = [
   "list_categories",
   "list_recipients",
   "list_transactions",
-  "request_send_money",
-  "request_transfer_money",
-  "send_money",
-  "transfer_money",
   "update_transaction_category",
 ];
 
+const ALL_TOOL_NAMES = [...ALWAYS_ON_TOOL_NAMES, ...SPEND_TOOL_NAMES].sort();
+
 describe("MCP surface", () => {
-  it("lists Oforica reads plus existing writes", async () => {
+  it("hides spend tools from tools/list until MERCURY_OPS_ALLOW_SPEND is set", async () => {
     const handle = createMessageHandler({
+      env: {},
       runTool: async () => {
         throw new Error("should not run");
       },
     });
     const listed = await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const names = listed.result.tools.map((t) => t.name).sort();
-    assert.deepEqual(names, TOOL_NAMES);
+    assert.deepEqual(names, ALWAYS_ON_TOOL_NAMES);
+    assert.equal(names.some((name) => SPEND_TOOL_NAMES.includes(name)), false);
     assert.equal(TOOL_DEFS.length, 13);
-
-    const listAccounts = listed.result.tools.find((t) => t.name === "list_accounts");
-    assert.ok(listAccounts);
-    assert.match(listAccounts.description, /GET \/accounts/);
+    assert.equal(advertisedTools({}).length, 9);
 
     const getAccount = listed.result.tools.find((t) => t.name === "get_account");
     assert.deepEqual(getAccount.inputSchema.required, ["accountId"]);
 
     const listTx = listed.result.tools.find((t) => t.name === "list_transactions");
     assert.match(listTx.description, /GET \/transactions/);
-    assert.ok(listTx.inputSchema.properties.accountId);
-    assert.ok(listTx.inputSchema.properties.postedStart);
 
-    const getTx = listed.result.tools.find((t) => t.name === "get_transaction");
-    assert.deepEqual(getTx.inputSchema.required, ["transactionId"]);
+    const categorize = listed.result.tools.find(
+      (t) => t.name === "update_transaction_category"
+    );
+    assert.deepEqual(categorize.inputSchema.required, [
+      "transactionId",
+      "categoryId",
+    ]);
+    assert.ok(listed.result.tools.find((t) => t.name === "create_recipient"));
+  });
 
-    const listRecipients = listed.result.tools.find((t) => t.name === "list_recipients");
-    assert.match(listRecipients.description, /GET \/recipients/);
+  it("advertises spend tools when MERCURY_OPS_ALLOW_SPEND=1", async () => {
+    const handle = createMessageHandler({
+      env: { MERCURY_OPS_ALLOW_SPEND: "1" },
+      runTool: async () => {
+        throw new Error("should not run");
+      },
+    });
+    const listed = await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const names = listed.result.tools.map((t) => t.name).sort();
+    assert.deepEqual(names, ALL_TOOL_NAMES);
 
     const send = listed.result.tools.find((t) => t.name === "send_money");
     assert.deepEqual(send.inputSchema.required, [
@@ -85,23 +98,56 @@ describe("MCP surface", () => {
       "amount",
       "idempotencyKey",
     ]);
-
-    const categorize = listed.result.tools.find(
-      (t) => t.name === "update_transaction_category"
-    );
-    assert.deepEqual(categorize.inputSchema.required, [
-      "transactionId",
-      "categoryId",
-    ]);
   });
 
-  it("initialize and tools/call return JSON-RPC results", async () => {
+  it("treats 1/true/yes/on as spend-enabled and anything else as off", () => {
+    assert.equal(isSpendAllowed({}), false);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "" }), false);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "0" }), false);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "false" }), false);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "1" }), true);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "true" }), true);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "YES" }), true);
+    assert.equal(isSpendAllowed({ MERCURY_OPS_ALLOW_SPEND: "On" }), true);
+  });
+
+  it("tools/call on a gated spend tool returns a clear error without dispatch", async () => {
+    let called = false;
     const handle = createMessageHandler({
+      env: {},
+      runTool: async () => {
+        called = true;
+        throw new Error("should not run");
+      },
+    });
+    const reply = await handle({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "send_money",
+        arguments: {
+          accountId: "acct-1",
+          recipientId: "rec-1",
+          amount: 1,
+          paymentMethod: "ach",
+          idempotencyKey: "nope",
+        },
+      },
+    });
+    assert.equal(reply.result.isError, true);
+    assert.match(reply.result.content[0].text, /MERCURY_OPS_ALLOW_SPEND=1/);
+    assert.match(reply.result.content[0].text, /disabled until Jim/);
+    assert.equal(called, false);
+  });
+
+  it("initialize and tools/call return JSON-RPC results for always-on tools", async () => {
+    const handle = createMessageHandler({
+      env: {},
       runTool: async (name, args) => {
-        assert.equal(name, "send_money");
+        assert.equal(name, "get_account");
         assert.equal(args.accountId, "acct-1");
-        assert.equal(args.idempotencyKey, "idem-1");
-        return { id: "txn-1", status: "pending" };
+        return { id: "acct-1", name: "Oforica checking" };
       },
     });
     const init = await handle({
@@ -118,19 +164,13 @@ describe("MCP surface", () => {
       id: 2,
       method: "tools/call",
       params: {
-        name: "send_money",
-        arguments: {
-          accountId: "acct-1",
-          recipientId: "rec-1",
-          amount: 12.34,
-          paymentMethod: "ach",
-          idempotencyKey: "idem-1",
-        },
+        name: "get_account",
+        arguments: { accountId: "acct-1" },
       },
     });
     assert.deepEqual(JSON.parse(call.result.content[0].text), {
-      id: "txn-1",
-      status: "pending",
+      id: "acct-1",
+      name: "Oforica checking",
     });
   });
 
@@ -157,6 +197,29 @@ describe("createToolRunner wiring", () => {
       },
     });
     await assert.rejects(() => runTool("get_organization", { accountId: "x" }), /Unknown tool/);
+    assert.equal(called, false);
+  });
+
+  it("blocks spend tools before fetch when the flag is unset", async () => {
+    let called = false;
+    const runTool = createToolRunner({
+      env: { MERCURY_API_TOKEN: "secret-token:mercury_test_fake" },
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not fetch");
+      },
+    });
+    await assert.rejects(
+      () =>
+        runTool("request_send_money", {
+          accountId: "a",
+          recipientId: "b",
+          amount: 1,
+          paymentMethod: "ach",
+          idempotencyKey: "k",
+        }),
+      /disabled until Jim enables MERCURY_OPS_ALLOW_SPEND=1/
+    );
     assert.equal(called, false);
   });
 });
