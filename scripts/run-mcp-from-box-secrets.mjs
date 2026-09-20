@@ -7,7 +7,7 @@
  * box secret is set (see README “Multi-org install example”).
  * Never print either value.
  *
- * Spend stays off unless MERCURY_OPS_ALLOW_SPEND=1.
+ * Spend tools are listed; execute stays off unless MERCURY_OPS_ALLOW_SPEND=1.
  * Do **not** Marketplace-publish. Register as mercury-ops (or
  * mercury-ops-oforica when sharing a host with stock Mercury OAuth).
  *

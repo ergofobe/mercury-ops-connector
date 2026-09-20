@@ -11,18 +11,18 @@ Not an official Mercury product. **No Marketplace publish.** Plugin id and proce
 | Surface | Org | Auth | Role |
 | --- | --- | --- | --- |
 | **Stock Mercury MCP** | OAuth org (not the API-token org) | OAuth | Reads for that OAuth session. Do not modify. |
-| **Mercury Ops** (`mercury-ops`) | API-token org | `MERCURY_API_TOKEN` | Banking reads + non-spend writes. Spend tools stay **off** until `MERCURY_OPS_ALLOW_SPEND` is set. |
+| **Mercury Ops** (`mercury-ops`) | API-token org | `MERCURY_API_TOKEN` | Full banking capability listed. Spend **execute** stays off until `MERCURY_OPS_ALLOW_SPEND=1` and Jim’s explicit green. |
 
 The stock OAuth plugin cannot see the API-token org. Keep both if you need both orgs.
 
 ## Dual spend gate
 
-Money-move tools are **implemented but gated off by default**. Both layers must pass:
+Spend tools are **always in `tools/list`** (full capability ships). Execute is **off by default**.
 
-1. **Flag:** `MERCURY_OPS_ALLOW_SPEND` unset/false → spend tools are **absent from `tools/list`** and `tools/call` returns a clear error (no Mercury request). Set to `1` / `true` / `yes` / `on` only when an authorized operator enables spend.
-2. **Operator greenlight:** even when the flag is on, agents must not send or transfer unless a human has authorized that movement. Approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
+1. **Execute refuse:** `MERCURY_OPS_ALLOW_SPEND` unset/false → `tools/call` returns a clear error (no Mercury request), e.g. *Spend tools disabled until MERCURY_OPS_ALLOW_SPEND=1 and operator has Jim’s explicit green.* Set to `1` / `true` / `yes` / `on` to allow execute.
+2. **Jim green:** never call send/transfer unless Jim has explicitly confirmed that movement. Prefer `request_*` when proving a write path. Approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
 
-Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_transfer_money`.
+Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_transfer_money`. No live money movement in tests.
 
 ## Tools (Phase A)
 
@@ -61,7 +61,7 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `MERCURY_API_TOKEN` | yes | Dashboard token, including `secret-token:`. Never log or echo. If the prefix is missing, the server adds it. |
-| `MERCURY_OPS_ALLOW_SPEND` | no | Default off. `1`/`true`/`yes`/`on` advertises and executes spend tools. |
+| `MERCURY_OPS_ALLOW_SPEND` | no | Default off. Spend tools stay in `tools/list`. `1`/`true`/`yes`/`on` allows execute. |
 | `MERCURY_API_BASE_URL` | no | Defaults to `https://api.mercury.com/api/v1`. |
 
 ```http

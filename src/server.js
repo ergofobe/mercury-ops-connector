@@ -35,18 +35,17 @@ export function isSpendAllowed(env = process.env) {
  * @param {string} [name]
  */
 export function spendDisabledMessage(name) {
-  const tool = name ? `${name} is` : "Spend tools are";
-  return `${tool} disabled until ${SPEND_FLAG_VAR}=1 is set. Human approval lives outside this connector.`;
+  const tool = name || "Spend tools";
+  return `${tool} disabled until ${SPEND_FLAG_VAR}=1 and operator has Jim's explicit green.`;
 }
 
 /**
- * tools/list surface: hide spend tools when the flag is off.
+ * Full capability is always advertised. Spend execute is gated separately.
  *
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.ProcessEnv} [_env]
  */
-export function advertisedTools(env = process.env) {
-  if (isSpendAllowed(env)) return TOOL_DEFS;
-  return TOOL_DEFS.filter((tool) => !SPEND_TOOL_SET.has(tool.name));
+export function advertisedTools(_env = process.env) {
+  return TOOL_DEFS;
 }
 
 const PURPOSE_SCHEMA = {
@@ -247,7 +246,7 @@ export const TOOL_DEFS = [
   {
     name: "send_money",
     description:
-      "POST /account/{accountId}/transactions (createTransaction). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money. Human approval lives OUTSIDE this connector.",
+      "POST /account/{accountId}/transactions (createTransaction). Always listed. Execute refuses unless MERCURY_OPS_ALLOW_SPEND=1 and Jim has explicitly greened spend. Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money. Human approval lives OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -281,7 +280,7 @@ export const TOOL_DEFS = [
   {
     name: "request_send_money",
     description:
-      "POST /account/{accountId}/request-send-money. GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Prefer this over send_money when spend is enabled. Approval decisions are made in Mercury — not by this connector.",
+      "POST /account/{accountId}/request-send-money. Always listed. Execute refuses unless MERCURY_OPS_ALLOW_SPEND=1 and Jim has explicitly greened spend. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Prefer this over send_money when proving a write path. Approval decisions are made in Mercury — not by this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -309,7 +308,7 @@ export const TOOL_DEFS = [
   {
     name: "transfer_money",
     description:
-      "POST /transfer (createInternalTransfer). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers.",
+      "POST /transfer (createInternalTransfer). Always listed. Execute refuses unless MERCURY_OPS_ALLOW_SPEND=1 and Jim has explicitly greened spend. Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers.",
     inputSchema: {
       type: "object",
       properties: {
@@ -330,7 +329,7 @@ export const TOOL_DEFS = [
   {
     name: "request_transfer_money",
     description:
-      "POST /request-transfer (requestTransferMoney). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues an internal transfer for Mercury dashboard approval. Same fields as transfer_money. Approval gates live OUTSIDE this connector.",
+      "POST /request-transfer (requestTransferMoney). Always listed. Execute refuses unless MERCURY_OPS_ALLOW_SPEND=1 and Jim has explicitly greened spend. Queues an internal transfer for Mercury dashboard approval. Same fields as transfer_money. Prefer this over transfer_money when proving a write path. Approval gates live OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {

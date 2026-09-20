@@ -26,7 +26,7 @@ const ALWAYS_ON_TOOL_NAMES = [
 const ALL_TOOL_NAMES = [...ALWAYS_ON_TOOL_NAMES, ...SPEND_TOOL_NAMES].sort();
 
 describe("MCP surface", () => {
-  it("hides spend tools from tools/list until MERCURY_OPS_ALLOW_SPEND is set", async () => {
+  it("always lists full capability including spend tools", async () => {
     const handle = createMessageHandler({
       env: {},
       runTool: async () => {
@@ -35,10 +35,12 @@ describe("MCP surface", () => {
     });
     const listed = await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const names = listed.result.tools.map((t) => t.name).sort();
-    assert.deepEqual(names, ALWAYS_ON_TOOL_NAMES);
-    assert.equal(names.some((name) => SPEND_TOOL_NAMES.includes(name)), false);
+    assert.deepEqual(names, ALL_TOOL_NAMES);
     assert.equal(TOOL_DEFS.length, 13);
-    assert.equal(advertisedTools({}).length, 9);
+    assert.equal(advertisedTools({}).length, 13);
+    for (const spend of SPEND_TOOL_NAMES) {
+      assert.ok(names.includes(spend));
+    }
 
     const getAccount = listed.result.tools.find((t) => t.name === "get_account");
     assert.deepEqual(getAccount.inputSchema.required, ["accountId"]);
@@ -56,9 +58,9 @@ describe("MCP surface", () => {
     assert.ok(listed.result.tools.find((t) => t.name === "create_recipient"));
   });
 
-  it("advertises spend tools when MERCURY_OPS_ALLOW_SPEND=1", async () => {
+  it("documents spend tool schemas even when the execute flag is off", async () => {
     const handle = createMessageHandler({
-      env: { MERCURY_OPS_ALLOW_SPEND: "1" },
+      env: {},
       runTool: async () => {
         throw new Error("should not run");
       },
@@ -137,7 +139,7 @@ describe("MCP surface", () => {
     });
     assert.equal(reply.result.isError, true);
     assert.match(reply.result.content[0].text, /MERCURY_OPS_ALLOW_SPEND=1/);
-    assert.match(reply.result.content[0].text, /disabled until MERCURY_OPS_ALLOW_SPEND=1/);
+    assert.match(reply.result.content[0].text, /Jim's explicit green/);
     assert.equal(called, false);
   });
 
@@ -218,7 +220,7 @@ describe("createToolRunner wiring", () => {
           paymentMethod: "ach",
           idempotencyKey: "k",
         }),
-      /disabled until MERCURY_OPS_ALLOW_SPEND=1 is set/
+      /disabled until MERCURY_OPS_ALLOW_SPEND=1 and operator has Jim's explicit green/
     );
     assert.equal(called, false);
   });

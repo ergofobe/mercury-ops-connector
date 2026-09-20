@@ -30,7 +30,7 @@
       "MERCURY_OPS_ALLOW_SPEND": {
         "type": "string",
         "title": "Allow spend tools",
-        "description": "Leave unset (default). Set to 1 only when an authorized operator enables spend. Until then, send_money / request_send_money / transfer_money / request_transfer_money are hidden from tools/list. Human approval still lives outside this connector."
+        "description": "Leave unset (default). Spend tools stay in tools/list but execute refuses until this is 1 and Jim has explicitly greened spend. Human approval still lives outside this connector."
       }
     },
     "required": [
