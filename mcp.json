@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mercury-ops": {
+      "command": "node",
+      "args": ["${CURSOR_PLUGIN_ROOT}/src/index.js"],
+      "cwd": "${CURSOR_PLUGIN_ROOT}",
+      "env": {
+        "MERCURY_API_TOKEN": "${MERCURY_API_TOKEN}",
+        "MERCURY_OPS_ALLOW_SPEND": "${MERCURY_OPS_ALLOW_SPEND}"
+      }
+    }
+  }
+}

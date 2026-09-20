@@ -1,0 +1,40 @@
+{
+  "name": "mercury-ops",
+  "displayName": "Mercury Ops",
+  "version": "1.2.0",
+  "description": "Mercury Ops: API-token Mercury banking MCP (reads + gated spend). Distinct from the stock Mercury OAuth plugin. Do not publish to Marketplace.",
+  "author": {
+    "name": "Oberon"
+  },
+  "homepage": "https://github.com/ergofobe/mercury-ops-connector",
+  "repository": "https://github.com/ergofobe/mercury-ops-connector",
+  "license": "MIT",
+  "keywords": [
+    "mercury",
+    "oforica",
+    "banking",
+    "send-money",
+    "transfer",
+    "recipients",
+    "mcp"
+  ],
+  "logo": "assets/logo.svg",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "MERCURY_API_TOKEN": {
+        "type": "string",
+        "title": "Mercury API token",
+        "description": "Token from Mercury dashboard → Settings → Tokens. Include the secret-token: prefix. Send Money (createTransaction) needs an IP whitelist; request-send-money / request-transfer-money use the approval queue and may not. Never commit or paste this into chat."
+      },
+      "MERCURY_OPS_ALLOW_SPEND": {
+        "type": "string",
+        "title": "Allow spend tools",
+        "description": "Leave unset (default). Spend tools stay in tools/list but execute refuses until this is 1 and Jim has explicitly greened spend. Human approval still lives outside this connector."
+      }
+    },
+    "required": [
+      "MERCURY_API_TOKEN"
+    ]
+  }
+}
