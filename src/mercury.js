@@ -75,6 +75,8 @@ const ALLOWED_PATHS = [
   /^\/recipients$/,
   /^\/recipient\/[^/]+$/,
   /^\/categories$/,
+  /^\/categories\/[^/]+$/,
+  /^\/transaction\/[^/]+\/attachments$/,
 ];
 
 export class MercuryError extends Error {
@@ -620,6 +622,128 @@ export function buildListTransactionsQuery(args) {
   return query;
 }
 
+export const ATTACHMENT_TYPES = ["receipt", "bill", "other"];
+export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
+export const MAX_FILENAME_CHARS = 299;
+
+const BLOCKED_ATTACHMENT_EXTS = new Set([
+  "exe",
+  "bat",
+  "cmd",
+  "com",
+  "scr",
+  "pif",
+  "msi",
+  "dll",
+]);
+
+/**
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {boolean|undefined}
+ */
+export function optionalBoolean(value, name) {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  const text = String(value).trim().toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  throw new MercuryError(`${name} must be a boolean`, { code: "validation" });
+}
+
+/**
+ * POST /categories (createCategory). Visibility flags default true for Books.
+ *
+ * @param {unknown} args
+ */
+export function buildCreateCategoryBody(args) {
+  const input = args && typeof args === "object" ? args : {};
+  return {
+    name: requireString(input.name, "name"),
+    visibleForCardSpend:
+      optionalBoolean(input.visibleForCardSpend, "visibleForCardSpend") ?? true,
+    visibleForOther: optionalBoolean(input.visibleForOther, "visibleForOther") ?? true,
+    visibleForReimbursements:
+      optionalBoolean(input.visibleForReimbursements, "visibleForReimbursements") ??
+      true,
+  };
+}
+
+/**
+ * POST /categories/{id} (editCategory). At least one field required.
+ *
+ * @param {unknown} args
+ */
+export function buildEditCategoryBody(args) {
+  const input = args && typeof args === "object" ? args : {};
+  /** @type {Record<string, unknown>} */
+  const body = {};
+  const name = optionalString(input.name, "name");
+  if (name !== undefined) body.name = name;
+  const card = optionalBoolean(input.visibleForCardSpend, "visibleForCardSpend");
+  const other = optionalBoolean(input.visibleForOther, "visibleForOther");
+  const reimb = optionalBoolean(
+    input.visibleForReimbursements,
+    "visibleForReimbursements"
+  );
+  if (card !== undefined) body.visibleForCardSpend = card;
+  if (other !== undefined) body.visibleForOther = other;
+  if (reimb !== undefined) body.visibleForReimbursements = reimb;
+  if (Object.keys(body).length === 0) {
+    throw new MercuryError(
+      "edit_category requires at least one of name, visibleForCardSpend, visibleForOther, visibleForReimbursements",
+      { code: "validation" }
+    );
+  }
+  return body;
+}
+
+/**
+ * Decode a receipt/bill file for multipart upload. Never logs content.
+ *
+ * @param {unknown} args
+ */
+export function buildTransactionAttachment(args) {
+  const input = args && typeof args === "object" ? args : {};
+  const filename = requireString(input.filename, "filename", {
+    max: MAX_FILENAME_CHARS,
+  });
+  if (/[/\\]/.test(filename) || filename.includes("..")) {
+    throw new MercuryError(
+      "filename must be a basename without path separators",
+      { code: "validation" }
+    );
+  }
+  const ext = filename.includes(".")
+    ? filename.split(".").pop().toLowerCase()
+    : "";
+  if (BLOCKED_ATTACHMENT_EXTS.has(ext)) {
+    throw new MercuryError(`filename extension .${ext} is not allowed`, {
+      code: "validation",
+    });
+  }
+  const b64 = requireString(input.contentBase64 ?? input.content, "contentBase64", {
+    max: Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3) + 128,
+  });
+  const buffer = Buffer.from(b64, "base64");
+  if (buffer.length === 0) {
+    throw new MercuryError("file is empty", { code: "validation" });
+  }
+  if (buffer.length > MAX_ATTACHMENT_BYTES) {
+    throw new MercuryError("file exceeds Mercury maximum of 32MB", {
+      code: "oversize",
+    });
+  }
+  const attachmentType =
+    input.attachmentType == null || input.attachmentType === ""
+      ? "receipt"
+      : requireEnum(input.attachmentType, ATTACHMENT_TYPES, "attachmentType");
+  const contentType =
+    optionalString(input.contentType ?? input.mimeType, "contentType") ||
+    "application/octet-stream";
+  return { filename, buffer, attachmentType, contentType };
+}
+
 /**
  * Inspect a captured fetch call for tests. Never returns the raw token.
  * @param {{ url: string, init?: RequestInit }} call
@@ -660,6 +784,19 @@ export function inspectMercuryCall(call) {
     authHasSecretPrefix: auth.startsWith("Bearer secret-token:"),
     contentType: String(headers["Content-Type"] || headers["content-type"] || ""),
     body,
+    form:
+      typeof FormData !== "undefined" && init.body instanceof FormData
+        ? {
+            hasFile: init.body.has("file"),
+            attachmentType: String(init.body.get("attachmentType") || ""),
+            filename: (() => {
+              const file = init.body.get("file");
+              return file && typeof file === "object" && "name" in file
+                ? String(file.name)
+                : "";
+            })(),
+          }
+        : null,
   };
 }
 
@@ -674,7 +811,7 @@ export function createMercuryClient({
 } = {}) {
   /**
    * @param {string} pathname
-   * @param {{ method?: string, query?: Record<string, string | string[]>, json?: unknown }} [opts]
+   * @param {{ method?: string, query?: Record<string, string | string[]>, json?: unknown, formData?: FormData }} [opts]
    */
   async function mercuryFetch(pathname, opts = {}) {
     const token = requireApiToken(env);
@@ -706,6 +843,8 @@ export function createMercuryClient({
     if (opts.json !== undefined) {
       headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(opts.json);
+    } else if (opts.formData) {
+      init.body = opts.formData;
     }
 
     let response;
@@ -843,6 +982,64 @@ export function createMercuryClient({
     async listCategories(args) {
       const query = buildListCategoriesQuery(args);
       return mercuryFetch("/categories", { query });
+    },
+
+    /**
+     * POST /categories (createCategory).
+     */
+    async createCategory(args) {
+      const body = buildCreateCategoryBody(args);
+      return mercuryFetch("/categories", { method: "POST", json: body });
+    },
+
+    /**
+     * POST /categories/{expenseCategoryId} (editCategory).
+     */
+    async editCategory(args) {
+      const categoryId = requireString(
+        args && (args.categoryId ?? args.expenseCategoryId),
+        "categoryId"
+      );
+      const body = buildEditCategoryBody(args);
+      return mercuryFetch(`/categories/${encodeURIComponent(categoryId)}`, {
+        method: "POST",
+        json: body,
+      });
+    },
+
+    /**
+     * DELETE /categories/{expenseCategoryId} (deleteCategory).
+     */
+    async deleteCategory(args) {
+      const categoryId = requireString(
+        args && (args.categoryId ?? args.expenseCategoryId),
+        "categoryId"
+      );
+      return mercuryFetch(`/categories/${encodeURIComponent(categoryId)}`, {
+        method: "DELETE",
+      });
+    },
+
+    /**
+     * POST /transaction/{id}/attachments (uploadTransactionAttachment).
+     */
+    async uploadTransactionAttachment(args) {
+      const transactionId = requireString(
+        args && args.transactionId,
+        "transactionId"
+      );
+      const file = buildTransactionAttachment(args);
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([file.buffer], { type: file.contentType }),
+        file.filename
+      );
+      formData.append("attachmentType", file.attachmentType);
+      return mercuryFetch(
+        `/transaction/${encodeURIComponent(transactionId)}/attachments`,
+        { method: "POST", formData }
+      );
     },
 
     /**

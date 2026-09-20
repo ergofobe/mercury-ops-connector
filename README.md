@@ -4,7 +4,7 @@
 
 Not an official Mercury product. **No Marketplace publish.** Plugin id and process name: **`mercury-ops`** (display name **Mercury Ops**). Do not register this server as bare “Mercury”.
 
-**Phase B (follow-on PR):** accounting extras — categories CRUD, receipt upload, invoices, statements.
+**Follow-up Books slice:** invoices, customers, statement PDFs. This PR includes Mercury custom category CRUD and receipt attach only.
 
 ## Two Mercury MCPs
 
@@ -36,7 +36,7 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | `get_transaction` | `GET /transaction/{transactionId}` |
 | `list_recipients` | `GET /recipients` |
 | `get_recipient` | `GET /recipient/{id}` |
-| `list_categories` | `GET /categories` (read custom category ids only — not CRUD) |
+| `list_categories` | `GET /categories` |
 
 ### Non-spend writes (always on)
 
@@ -44,6 +44,10 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | --- | --- |
 | `create_recipient` | `POST /recipients` |
 | `update_transaction_category` | `PATCH /transaction/{transactionId}` |
+| `create_category` | `POST /categories` |
+| `edit_category` | `POST /categories/{categoryId}` |
+| `delete_category` | `DELETE /categories/{categoryId}` |
+| `upload_transaction_attachment` | `POST /transaction/{id}/attachments` (multipart receipt/bill) |
 
 ### Spend / money-move (implemented, gated)
 
@@ -55,6 +59,10 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | `request_transfer_money` | `POST /request-transfer` |
 
 `createTransaction` does not accept `categoryId`. Categorize after a send with `update_transaction_category`.
+
+### Books / accounting (Mercury, not QBO)
+
+Mercury **custom categories** (`categoryData` / `categoryId`) are **not** QBO GL codes (`glAllocations`). If no accounting integration is connected, `glAllocations` stay empty. Books-on-Mercury workflow: **categorize** (`create_category` / `list_categories` / `update_transaction_category`) **+ attach receipts** (`upload_transaction_attachment`). Invoices, customers, and statement PDFs wait for a follow-up PR.
 
 ## Env
 
@@ -109,7 +117,7 @@ The stdio server itself only reads `MERCURY_API_TOKEN` and `MERCURY_OPS_ALLOW_SP
 - **Get txn:** wrapped `GET /transaction/{id}`. Not wrapped: `GET /account/{id}/transaction/{id}`.
 - **Category on create:** `PostTransactionAPIRequest` has no `categoryId` / `glAllocations`. `glAllocations` are accounting GL codes; this server sets Mercury `categoryId` only.
 - **No linked-bank transfer path.** External bank = recipient + `purpose.simple.category = transferToMyExternalAccount`.
-- **Not in Phase A:** categories CRUD, receipt/attachment upload, invoices, statements, cards, treasury, webhooks, users, approval-request lists, recipient invites.
+- **Not in this PR:** invoices, customers, statement PDFs, cards, treasury, webhooks, users, approval-request lists, recipient invites.
 
 ## Tests (no live Mercury)
 

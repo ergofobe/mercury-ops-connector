@@ -416,7 +416,7 @@ export const TOOL_DEFS = [
   {
     name: "list_categories",
     description:
-      "GET /categories. Resolve a categoryId for update_transaction_category. These are Mercury custom categories (categoryData), not accounting-integration GL codes (glAllocations).",
+      "GET /categories. Mercury custom categories (categoryData) for Books-on-Mercury. These are not QBO/accounting-integration GL codes (glAllocations). If no accounting integration is connected, glAllocations stay empty — categorize here and attach receipts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -445,6 +445,68 @@ export const TOOL_DEFS = [
         },
       },
       required: ["transactionId", "categoryId"],
+    },
+  },
+  {
+    name: "create_category",
+    description:
+      "POST /categories (createCategory). Create a Mercury custom expense category (not a QBO GL). Required: name. Optional visibility flags default true: visibleForCardSpend, visibleForOther, visibleForReimbursements.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        visibleForCardSpend: { type: "boolean" },
+        visibleForOther: { type: "boolean" },
+        visibleForReimbursements: { type: "boolean" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "edit_category",
+    description:
+      "POST /categories/{categoryId} (editCategory). Update name and/or visibility flags. At least one field besides categoryId is required.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        categoryId: { type: "string" },
+        name: { type: "string" },
+        visibleForCardSpend: { type: "boolean" },
+        visibleForOther: { type: "boolean" },
+        visibleForReimbursements: { type: "boolean" },
+      },
+      required: ["categoryId"],
+    },
+  },
+  {
+    name: "delete_category",
+    description:
+      "DELETE /categories/{categoryId} (deleteCategory). Remove a Mercury custom category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        categoryId: { type: "string" },
+      },
+      required: ["categoryId"],
+    },
+  },
+  {
+    name: "upload_transaction_attachment",
+    description:
+      "POST /transaction/{transactionId}/attachments (uploadTransactionAttachment). Attach a receipt/bill (multipart). Pass filename + contentBase64. Optional attachmentType: receipt (default) | bill | other. Optional contentType. Max 32MB. Books workflow: categorize + attach receipts. Invoices/customers/statement PDFs are a follow-up.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        transactionId: { type: "string" },
+        filename: { type: "string", description: "Basename only, max 299 characters" },
+        contentBase64: { type: "string", description: "File bytes as base64" },
+        attachmentType: {
+          type: "string",
+          enum: ["receipt", "bill", "other"],
+        },
+        contentType: { type: "string", description: "MIME type, e.g. application/pdf" },
+      },
+      required: ["transactionId", "filename", "contentBase64"],
     },
   },
 ];
@@ -495,6 +557,14 @@ export function createToolRunner({
         return mercury.getRecipient(args);
       case "list_categories":
         return mercury.listCategories(args);
+      case "create_category":
+        return mercury.createCategory(args);
+      case "edit_category":
+        return mercury.editCategory(args);
+      case "delete_category":
+        return mercury.deleteCategory(args);
+      case "upload_transaction_attachment":
+        return mercury.uploadTransactionAttachment(args);
       case "update_transaction_category":
         return mercury.updateTransactionCategory(args);
       default:

@@ -8,8 +8,9 @@ description: >
   Jim’s explicit green for that specific action, even if
   MERCURY_OPS_ALLOW_SPEND=1. Flag default off (execute refuse).
   Prefer request_* when proving. No live money in tests. Approval
-  lives OUTSIDE this connector. Phase B accounting extras — do not
-  invent those tools here.
+  lives OUTSIDE this connector. Books-on-Mercury: categorize + attach
+  receipts (not QBO GL). Invoices/customers/statement PDFs are a
+  follow-up — do not invent those tools.
 ---
 
 # Mercury Ops (Phase A — API-token org banking)
@@ -36,9 +37,9 @@ This connector does not approve, reject, or auto-release queued payments.
 
 **Reads:** `list_accounts`, `get_account`, `list_transactions`, `get_transaction`, `list_recipients`, `get_recipient`, `list_categories`
 
-**Non-spend writes:** `create_recipient`, `update_transaction_category`
+**Non-spend writes:** `create_recipient`, `update_transaction_category`, `create_category`, `edit_category`, `delete_category`, `upload_transaction_attachment`
 
-`list_transactions` is `GET /transactions` (optional `accountId`; prefer `postedStart`/`postedEnd`). Paginate with `page.nextPage` as `start_after`. Do not invent Phase B tools (category CRUD, receipt upload, invoices, statements).
+`list_transactions` is `GET /transactions` (optional `accountId`; prefer `postedStart`/`postedEnd`). Paginate with `page.nextPage` as `start_after`. Mercury custom categories are **not** QBO `glAllocations` (those stay empty without an accounting integration). Books workflow: categorize + attach receipts. Do not invent invoices, customers, or statement-PDF tools.
 
 ## Auth
 
