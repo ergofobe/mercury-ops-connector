@@ -3,11 +3,8 @@ import assert from "node:assert/strict";
 import {
   MAX_AMOUNT,
   MAX_NOTE_CHARS,
-  buildCreateCategoryBody,
   buildCreateRecipientBody,
-  buildEditCategoryBody,
   buildListTransactionsQuery,
-  buildTransactionAttachment,
   buildSendMoneyBody,
   buildTransferBody,
   buildUpdateTransactionBody,
@@ -462,84 +459,6 @@ describe("list_categories request shape", () => {
     assert.equal(inspected.query.limit, "50");
     assert.equal(inspected.query.order, "asc");
     assertBearerAuth(inspected, calls);
-  });
-});
-
-describe("category CRUD request shapes", () => {
-  it("POSTs /categories with name and default visibility", async () => {
-    const { calls, runTool } = mockClient();
-    await runTool("create_category", { name: "Contractors" });
-    const inspected = lastInspect(calls);
-    assert.equal(inspected.method, "POST");
-    assert.equal(inspected.path, "/categories");
-    assert.deepEqual(inspected.body, {
-      name: "Contractors",
-      visibleForCardSpend: true,
-      visibleForOther: true,
-      visibleForReimbursements: true,
-    });
-    assertBearerAuth(inspected, calls);
-  });
-
-  it("POSTs /categories/{id} to edit and requires a field", async () => {
-    const { calls, runTool } = mockClient();
-    await runTool("edit_category", { categoryId: CATEGORY, name: "Vendors" });
-    const inspected = lastInspect(calls);
-    assert.equal(inspected.method, "POST");
-    assert.equal(inspected.path, `/categories/${CATEGORY}`);
-    assert.deepEqual(inspected.body, { name: "Vendors" });
-    assert.throws(() => buildEditCategoryBody({}), /at least one of name/);
-    assert.equal(buildCreateCategoryBody({ name: "X" }).visibleForOther, true);
-  });
-
-  it("DELETEs /categories/{id}", async () => {
-    const { calls, runTool } = mockClient();
-    await runTool("delete_category", { categoryId: CATEGORY });
-    const inspected = lastInspect(calls);
-    assert.equal(inspected.method, "DELETE");
-    assert.equal(inspected.path, `/categories/${CATEGORY}`);
-    assert.equal(inspected.body, null);
-    assertBearerAuth(inspected, calls);
-  });
-});
-
-describe("upload_transaction_attachment request shape", () => {
-  it("POSTs multipart /transaction/{id}/attachments as receipt", async () => {
-    const { calls, runTool } = mockClient();
-    const contentBase64 = Buffer.from("%PDF-1.4 receipt").toString("base64");
-    await runTool("upload_transaction_attachment", {
-      transactionId: TXN,
-      filename: "receipt.pdf",
-      contentBase64,
-      contentType: "application/pdf",
-    });
-    const inspected = lastInspect(calls);
-    assert.equal(inspected.method, "POST");
-    assert.equal(inspected.path, `/transaction/${TXN}/attachments`);
-    assert.equal(inspected.body, null);
-    assert.equal(inspected.form.hasFile, true);
-    assert.equal(inspected.form.attachmentType, "receipt");
-    assert.equal(inspected.form.filename, "receipt.pdf");
-    assertBearerAuth(inspected, calls);
-  });
-
-  it("rejects path-like filenames and empty files before fetch", () => {
-    assert.throws(
-      () =>
-        buildTransactionAttachment({
-          filename: "../secret.pdf",
-          contentBase64: Buffer.from("x").toString("base64"),
-        }),
-      /basename without path/
-    );
-    assert.throws(
-      () =>
-        buildTransactionAttachment({
-          filename: "ok.pdf",
-          contentBase64: "",
-        }),
-      /contentBase64 is required/
-    );
   });
 });
 

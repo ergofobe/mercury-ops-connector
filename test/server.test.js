@@ -12,10 +12,7 @@ import {
 } from "../src/server.js";
 
 const ALWAYS_ON_TOOL_NAMES = [
-  "create_category",
   "create_recipient",
-  "delete_category",
-  "edit_category",
   "get_account",
   "get_recipient",
   "get_transaction",
@@ -24,7 +21,6 @@ const ALWAYS_ON_TOOL_NAMES = [
   "list_recipients",
   "list_transactions",
   "update_transaction_category",
-  "upload_transaction_attachment",
 ];
 
 const ALL_TOOL_NAMES = [...ALWAYS_ON_TOOL_NAMES, ...SPEND_TOOL_NAMES].sort();
@@ -40,8 +36,8 @@ describe("MCP surface", () => {
     const listed = await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const names = listed.result.tools.map((t) => t.name).sort();
     assert.deepEqual(names, ALL_TOOL_NAMES);
-    assert.equal(TOOL_DEFS.length, 17);
-    assert.equal(advertisedTools({}).length, 17);
+    assert.equal(TOOL_DEFS.length, 13);
+    assert.equal(advertisedTools({}).length, 13);
     for (const spend of SPEND_TOOL_NAMES) {
       assert.ok(names.includes(spend));
     }
