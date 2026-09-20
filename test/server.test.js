@@ -143,6 +143,48 @@ describe("MCP surface", () => {
     assert.equal(called, false);
   });
 
+  it("refuses every spend tool at the handler layer for every off value of the flag", async () => {
+    const spendArgs = {
+      send_money: { accountId: "a", recipientId: "r", amount: 1, paymentMethod: "ach", idempotencyKey: "k" },
+      request_send_money: { accountId: "a", recipientId: "r", amount: 1, paymentMethod: "ach", idempotencyKey: "k" },
+      transfer_money: { sourceAccountId: "a", destinationAccountId: "b", amount: 1, idempotencyKey: "k" },
+      request_transfer_money: { sourceAccountId: "a", destinationAccountId: "b", amount: 1, idempotencyKey: "k" },
+    };
+    assert.deepEqual(Object.keys(spendArgs).sort(), [...SPEND_TOOL_NAMES].sort());
+
+    // Includes the literal placeholder a host may leave when the variable is unconfigured.
+    const offValues = [undefined, "", "0", "false", "no", "off", "enabled", "${MERCURY_OPS_ALLOW_SPEND}"];
+    for (const flag of offValues) {
+      let fetched = 0;
+      const env = { MERCURY_API_TOKEN: "secret-token:mercury_test_fake" };
+      if (flag !== undefined) env.MERCURY_OPS_ALLOW_SPEND = flag;
+      const runTool = createToolRunner({
+        env,
+        fetchImpl: async () => {
+          fetched += 1;
+          throw new Error("should not fetch");
+        },
+      });
+      const handle = createMessageHandler({ runTool, env });
+      for (const name of SPEND_TOOL_NAMES) {
+        const reply = await handle({
+          jsonrpc: "2.0",
+          id: 9,
+          method: "tools/call",
+          params: { name, arguments: spendArgs[name] },
+        });
+        assert.equal(reply.result.isError, true, `${name} with flag ${JSON.stringify(flag)}`);
+        assert.match(reply.result.content[0].text, /disabled until MERCURY_OPS_ALLOW_SPEND=1/);
+        await assert.rejects(
+          () => runTool(name, spendArgs[name]),
+          /disabled until MERCURY_OPS_ALLOW_SPEND=1/,
+          `${name} runner with flag ${JSON.stringify(flag)}`
+        );
+      }
+      assert.equal(fetched, 0);
+    }
+  });
+
   it("initialize and tools/call return JSON-RPC results for always-on tools", async () => {
     const handle = createMessageHandler({
       env: {},

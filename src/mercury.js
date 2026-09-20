@@ -61,6 +61,8 @@ export const TRANSACTION_STATUSES = [
   "blocked",
 ];
 
+const DECIMAL_AMOUNT = /^\s*\d+(?:\.\d+)?\s*$/;
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 const ALLOWED_PATHS = [
@@ -150,9 +152,27 @@ export function optionalString(value, name, opts = {}) {
  * @returns {number}
  */
 export function requireAmount(value, name = "amount") {
-  const num = typeof value === "number" ? value : Number(value);
+  // Only a JSON number or a plain decimal string. Number() coercion would turn
+  // true, [5], or "0x10" into a spendable amount.
+  let num;
+  if (typeof value === "number") {
+    num = value;
+  } else if (typeof value === "string" && DECIMAL_AMOUNT.test(value)) {
+    num = Number(value);
+  } else {
+    throw new MercuryError(
+      `${name} must be a number in USD dollars (e.g. 25.50)`,
+      { code: "validation" }
+    );
+  }
   if (!Number.isFinite(num)) {
     throw new MercuryError(`${name} must be a finite number`, { code: "validation" });
+  }
+  if (Math.abs(num * 100 - Math.round(num * 100)) > 1e-6) {
+    throw new MercuryError(
+      `${name} must not have more than 2 decimal places (whole cents)`,
+      { code: "validation" }
+    );
   }
   if (num < MIN_AMOUNT) {
     throw new MercuryError(

@@ -254,7 +254,8 @@ export const TOOL_DEFS = [
         recipientId: { type: "string" },
         amount: {
           type: "number",
-          description: "Positive USD amount, minimum 0.01",
+          minimum: 0.01,
+          description: "Positive USD amount, whole cents (max 2 decimals)",
         },
         paymentMethod: {
           type: "string",
@@ -286,7 +287,11 @@ export const TOOL_DEFS = [
       properties: {
         accountId: { type: "string" },
         recipientId: { type: "string" },
-        amount: { type: "number" },
+        amount: {
+          type: "number",
+          minimum: 0.01,
+          description: "Positive USD amount, whole cents (max 2 decimals)",
+        },
         paymentMethod: {
           type: "string",
           enum: ["ach", "check", "domesticWire", "internationalWire"],
@@ -314,7 +319,11 @@ export const TOOL_DEFS = [
       properties: {
         sourceAccountId: { type: "string" },
         destinationAccountId: { type: "string" },
-        amount: { type: "number" },
+        amount: {
+          type: "number",
+          minimum: 0.01,
+          description: "Positive USD amount, whole cents (max 2 decimals)",
+        },
         idempotencyKey: { type: "string" },
         note: { type: "string" },
       },
@@ -335,7 +344,11 @@ export const TOOL_DEFS = [
       properties: {
         sourceAccountId: { type: "string" },
         destinationAccountId: { type: "string" },
-        amount: { type: "number" },
+        amount: {
+          type: "number",
+          minimum: 0.01,
+          description: "Positive USD amount, whole cents (max 2 decimals)",
+        },
         idempotencyKey: { type: "string" },
         note: { type: "string" },
       },

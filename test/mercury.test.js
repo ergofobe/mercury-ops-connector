@@ -10,6 +10,7 @@ import {
   buildUpdateTransactionBody,
   createMercuryClient,
   inspectMercuryCall,
+  requireAmount,
 } from "../src/mercury.js";
 import { createToolRunner } from "../src/server.js";
 import { safeErrorMessage } from "../src/secrets.js";
@@ -537,6 +538,42 @@ describe("validation and oversize", () => {
         }),
       /purpose is required when paymentMethod is domesticWire/
     );
+  });
+
+  it("rejects coerced, non-numeric, and sub-cent amounts before fetch", async () => {
+    const { calls, runTool } = mockClient();
+    const base = {
+      accountId: ACCOUNT,
+      recipientId: RECIPIENT,
+      paymentMethod: "ach",
+      idempotencyKey: "amt",
+    };
+    for (const amount of [true, [5], "0x10", "1e2", "$5", "5,00", {}, NaN, Infinity]) {
+      await assert.rejects(
+        () => runTool("send_money", { ...base, amount }),
+        /amount must be/,
+        `amount ${JSON.stringify(amount)} should be rejected`
+      );
+    }
+    await assert.rejects(
+      () => runTool("send_money", { ...base, amount: 10.005 }),
+      /more than 2 decimal places/
+    );
+    await assert.rejects(
+      () =>
+        runTool("transfer_money", {
+          sourceAccountId: ACCOUNT,
+          destinationAccountId: DEST,
+          amount: "10.005",
+          idempotencyKey: "amt",
+        }),
+      /more than 2 decimal places/
+    );
+    assert.equal(calls.length, 0);
+
+    assert.equal(requireAmount("25.50"), 25.5);
+    assert.equal(requireAmount(0.29), 0.29);
+    assert.equal(requireAmount(1234.56), 1234.56);
   });
 
   it("prefixes a bare token so Authorization still uses secret-token:", async () => {
