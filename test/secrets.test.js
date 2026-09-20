@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyOforicaTokenAlias,
   missingTokenVars,
   normalizeApiToken,
   requireApiToken,
@@ -25,6 +26,18 @@ describe("token config never echoes secrets", () => {
         return true;
       }
     );
+  });
+
+  it("applyOforicaTokenAlias maps OFORICA_MERCURY_API_TOKEN without overwriting", () => {
+    const mapped = applyOforicaTokenAlias({
+      OFORICA_MERCURY_API_TOKEN: SECRET,
+    });
+    assert.equal(mapped.MERCURY_API_TOKEN, SECRET);
+    const kept = applyOforicaTokenAlias({
+      MERCURY_API_TOKEN: "secret-token:already",
+      OFORICA_MERCURY_API_TOKEN: SECRET,
+    });
+    assert.equal(kept.MERCURY_API_TOKEN, "secret-token:already");
   });
 
   it("normalizeApiToken adds secret-token: when missing", () => {

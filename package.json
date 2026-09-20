@@ -1,8 +1,8 @@
 {
   "name": "mercury-ops",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Cursor plugin: Mercury Banking write ops (send/transfer/recipient/categorize) complementary to stock Mercury MCP",
+  "description": "Cursor plugin: Oforica-scoped Mercury Banking read+write MCP (API token REST); complementary to stock OG Holdings OAuth Mercury MCP",
   "type": "module",
   "engines": {
     "node": ">=18"

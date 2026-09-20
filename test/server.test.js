@@ -10,8 +10,13 @@ import {
 
 const TOOL_NAMES = [
   "create_recipient",
+  "get_account",
   "get_recipient",
+  "get_transaction",
+  "list_accounts",
   "list_categories",
+  "list_recipients",
+  "list_transactions",
   "request_send_money",
   "request_transfer_money",
   "send_money",
@@ -20,7 +25,7 @@ const TOOL_NAMES = [
 ];
 
 describe("MCP surface", () => {
-  it("lists exactly the eight write tools", async () => {
+  it("lists Oforica reads plus existing writes", async () => {
     const handle = createMessageHandler({
       runTool: async () => {
         throw new Error("should not run");
@@ -29,7 +34,25 @@ describe("MCP surface", () => {
     const listed = await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const names = listed.result.tools.map((t) => t.name).sort();
     assert.deepEqual(names, TOOL_NAMES);
-    assert.equal(TOOL_DEFS.length, 8);
+    assert.equal(TOOL_DEFS.length, 13);
+
+    const listAccounts = listed.result.tools.find((t) => t.name === "list_accounts");
+    assert.ok(listAccounts);
+    assert.match(listAccounts.description, /GET \/accounts/);
+
+    const getAccount = listed.result.tools.find((t) => t.name === "get_account");
+    assert.deepEqual(getAccount.inputSchema.required, ["accountId"]);
+
+    const listTx = listed.result.tools.find((t) => t.name === "list_transactions");
+    assert.match(listTx.description, /GET \/transactions/);
+    assert.ok(listTx.inputSchema.properties.accountId);
+    assert.ok(listTx.inputSchema.properties.postedStart);
+
+    const getTx = listed.result.tools.find((t) => t.name === "get_transaction");
+    assert.deepEqual(getTx.inputSchema.required, ["transactionId"]);
+
+    const listRecipients = listed.result.tools.find((t) => t.name === "list_recipients");
+    assert.match(listRecipients.description, /GET \/recipients/);
 
     const send = listed.result.tools.find((t) => t.name === "send_money");
     assert.deepEqual(send.inputSchema.required, [
@@ -133,7 +156,7 @@ describe("createToolRunner wiring", () => {
         throw new Error("should not fetch");
       },
     });
-    await assert.rejects(() => runTool("get_account", { accountId: "x" }), /Unknown tool/);
+    await assert.rejects(() => runTool("get_organization", { accountId: "x" }), /Unknown tool/);
     assert.equal(called, false);
   });
 });

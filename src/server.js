@@ -1,13 +1,13 @@
 /**
  * Minimal stdio MCP (newline-delimited JSON-RPC 2.0).
- * No @modelcontextprotocol/sdk — eight write tools do not need the extra surface.
+ * No @modelcontextprotocol/sdk — Oforica-scoped reads + writes over Mercury REST.
  */
 
 import { createMercuryClient } from "./mercury.js";
 import { missingTokenVars, safeErrorMessage } from "./secrets.js";
 
 export const PROTOCOL_VERSION = "2025-03-26";
-export const SERVER_INFO = { name: "mercury-ops", version: "1.0.0" };
+export const SERVER_INFO = { name: "mercury-ops", version: "1.1.0" };
 
 const PURPOSE_SCHEMA = {
   type: "object",
@@ -68,11 +68,146 @@ const ADDRESS_SCHEMA = {
   required: ["address1", "city", "postalCode", "country"],
 };
 
+const CURSOR_PAGE_PROPS = {
+  limit: {
+    type: "integer",
+    minimum: 1,
+    maximum: 1000,
+    description: "Maximum results (1–1000). Mercury defaults to 1000; prefer 100–300 and paginate.",
+  },
+  order: { type: "string", enum: ["asc", "desc"] },
+  start_after: {
+    type: "string",
+    description: "Exclusive cursor: start after this id (page.nextPage). Cannot combine with end_before.",
+  },
+  end_before: {
+    type: "string",
+    description: "Exclusive reverse cursor. Cannot combine with start_after.",
+  },
+};
+
 export const TOOL_DEFS = [
+  {
+    name: "list_accounts",
+    description:
+      "GET /accounts (getAccounts). Paginated Oforica accounts for the MERCURY_API_TOKEN org: id, name, nickname, availableBalance, currentBalance, status, kind, type, legalBusinessName, routing/account numbers, dashboardLink. Cursor params: limit, order, start_after, end_before. Stock Cursor Mercury OAuth MCP is OG Holdings-only and cannot see Oforica.",
+    inputSchema: {
+      type: "object",
+      properties: { ...CURSOR_PAGE_PROPS },
+    },
+  },
+  {
+    name: "get_account",
+    description:
+      "GET /account/{accountId} (getAccount). One Oforica account by id (balances, status, kind, legalBusinessName, routing). Use list_accounts to discover ids.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", description: "Mercury account id" },
+      },
+      required: ["accountId"],
+    },
+  },
+  {
+    name: "list_transactions",
+    description:
+      "GET /transactions (listTransactions). Org-level paginated transactions for the token org; pass accountId to filter one or more accounts. Prefer postedStart/postedEnd for dashboard date ranges (postedAt); start/end filter createdAt. Repeat page.nextPage as start_after. Alternate Mercury path GET /account/{accountId}/transactions uses offset pagination and is not wrapped. Prefer a smaller limit (100–300) and paginate.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: {
+          description:
+            "Optional account id filter (string, comma-separated, or array). Omit for all accounts in this org.",
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } },
+          ],
+        },
+        status: {
+          description: "pending | sent | cancelled | failed | reversed | blocked (repeatable).",
+          oneOf: [
+            { type: "string" },
+            {
+              type: "array",
+              items: {
+                type: "string",
+                enum: [
+                  "pending",
+                  "sent",
+                  "cancelled",
+                  "failed",
+                  "reversed",
+                  "blocked",
+                ],
+              },
+            },
+          ],
+        },
+        search: { type: "string", description: "Search transaction descriptions" },
+        start: {
+          type: "string",
+          description: "Earliest createdAt (YYYY-MM-DD or ISO 8601). Prefer postedStart for dashboard dates.",
+        },
+        end: {
+          type: "string",
+          description: "Latest createdAt (YYYY-MM-DD or ISO 8601).",
+        },
+        postedStart: {
+          type: "string",
+          description: "Earliest postedAt (YYYY-MM-DD or ISO 8601).",
+        },
+        postedEnd: {
+          type: "string",
+          description: "Latest postedAt (YYYY-MM-DD or ISO 8601).",
+        },
+        cardId: {
+          description: "Optional card id filter (string, comma-separated, or array).",
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } },
+          ],
+        },
+        mercuryCategory: {
+          type: "string",
+          description: "Mercury merchant-type category name (not custom categoryId).",
+        },
+        categoryId: {
+          type: "string",
+          description: "Custom category UUID from list_categories.",
+        },
+        start_at: {
+          type: "string",
+          description: "Inclusive start cursor. Cannot combine with start_after or end_before.",
+        },
+        ...CURSOR_PAGE_PROPS,
+      },
+    },
+  },
+  {
+    name: "get_transaction",
+    description:
+      "GET /transaction/{transactionId} (getTransactionById). One transaction by id (attachments, check images, metadata). Alternate GET /account/{accountId}/transaction/{transactionId} is not wrapped — id is enough.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        transactionId: { type: "string" },
+      },
+      required: ["transactionId"],
+    },
+  },
+  {
+    name: "list_recipients",
+    description:
+      "GET /recipients (getRecipients). Paginated payees for the token org. Prefer this over get_recipient when browsing. Cursor params: limit, order, start_after, end_before.",
+    inputSchema: {
+      type: "object",
+      properties: { ...CURSOR_PAGE_PROPS },
+    },
+  },
   {
     name: "send_money",
     description:
-      "POST /account/{accountId}/transactions (createTransaction). Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Use request_send_money when you want the Mercury approval queue (no IP whitelist). Use stock Mercury MCP for accounts, balances, and transaction lists. Jim/agent approval gates live OUTSIDE this connector.",
+      "POST /account/{accountId}/transactions (createTransaction). Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money unless an immediate send is explicitly authorized. Discover Oforica account/recipient ids with list_accounts / list_recipients on this plugin (stock Mercury OAuth is OG Holdings-only). Jim/agent approval gates live OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -106,7 +241,7 @@ export const TOOL_DEFS = [
   {
     name: "request_send_money",
     description:
-      "POST /account/{accountId}/request-send-money. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Request-send-money uses the approval queue and may not need an IP whitelist. Approval decisions are made in Mercury / by Jim — not by this connector. Use stock listSendMoneyApprovalRequests to watch the queue.",
+      "POST /account/{accountId}/request-send-money. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Request-send-money uses the approval queue and may not need an IP whitelist. Prefer this over send_money. Approval decisions are made in Mercury / by Jim — not by this connector. This plugin does not wrap listSendMoneyApprovalRequests.",
     inputSchema: {
       type: "object",
       properties: {
@@ -134,7 +269,7 @@ export const TOOL_DEFS = [
   {
     name: "transfer_money",
     description:
-      "POST /transfer (createInternalTransfer). Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers; category on create does not apply the same way. Use stock Mercury getAccounts for account ids and balances.",
+      "POST /transfer (createInternalTransfer). Moves funds between two Mercury accounts in the same organization. Required: sourceAccountId, destinationAccountId, amount, idempotencyKey. Optional: note. QBO often auto-maps internal transfers as bank transfers; category on create does not apply the same way. Use list_accounts on this plugin for Oforica account ids and balances.",
     inputSchema: {
       type: "object",
       properties: {
@@ -176,7 +311,7 @@ export const TOOL_DEFS = [
   {
     name: "create_recipient",
     description:
-      "POST /recipients. Create a payee. Required: name, emails. Optional: nickname, contactEmail, electronicRoutingInfo (ACH / linked external bank such as Chase), domesticWireRoutingInfo, checkInfo. International-wire recipients are typically created via recipient invite or the Mercury dashboard — this tool does not invent that endpoint. Use stock Mercury getRecipients to browse existing payees.",
+      "POST /recipients. Create a payee. Required: name, emails. Optional: nickname, contactEmail, electronicRoutingInfo (ACH / linked external bank such as Chase), domesticWireRoutingInfo, checkInfo. International-wire recipients are typically created via recipient invite or the Mercury dashboard — this tool does not invent that endpoint. Use list_recipients to browse existing payees.",
     inputSchema: {
       type: "object",
       properties: {
@@ -230,7 +365,7 @@ export const TOOL_DEFS = [
   {
     name: "get_recipient",
     description:
-      "GET /recipient/{id}. Thin read for write UX (confirm routing before send_money). Prefer stock Mercury getRecipient / getRecipients for browsing.",
+      "GET /recipient/{id} (getRecipient). One payee by id (confirm routing before send). Prefer list_recipients when browsing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -242,7 +377,7 @@ export const TOOL_DEFS = [
   {
     name: "list_categories",
     description:
-      "GET /categories. Thin convenience so update_transaction_category can resolve a categoryId. Prefer stock Mercury listCategories when browsing. These are Mercury custom categories (categoryData), not accounting-integration GL codes (glAllocations).",
+      "GET /categories. Resolve a categoryId for update_transaction_category. These are Mercury custom categories (categoryData), not accounting-integration GL codes (glAllocations).",
     inputSchema: {
       type: "object",
       properties: {
@@ -263,7 +398,7 @@ export const TOOL_DEFS = [
         transactionId: { type: "string" },
         categoryId: {
           type: "string",
-          description: "Mercury custom category id from list_categories or stock listCategories",
+          description: "Mercury custom category id from list_categories",
         },
         note: {
           type: "string",
@@ -294,6 +429,16 @@ export function createToolRunner({
    */
   return async function runTool(name, args = {}) {
     switch (name) {
+      case "list_accounts":
+        return mercury.listAccounts(args);
+      case "get_account":
+        return mercury.getAccount(args);
+      case "list_transactions":
+        return mercury.listTransactions(args);
+      case "get_transaction":
+        return mercury.getTransaction(args);
+      case "list_recipients":
+        return mercury.listRecipients(args);
       case "send_money":
         return mercury.sendMoney(args);
       case "request_send_money":

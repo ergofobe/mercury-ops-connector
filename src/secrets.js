@@ -3,6 +3,7 @@
  */
 
 export const REQUIRED_TOKEN_VAR = "MERCURY_API_TOKEN";
+export const OFORICA_TOKEN_ALIAS_VAR = "OFORICA_MERCURY_API_TOKEN";
 export const TOKEN_PREFIX = "secret-token:";
 
 const SENSITIVE_ENV_KEYS = [REQUIRED_TOKEN_VAR];
@@ -20,6 +21,24 @@ export function missingTokenVars(env = process.env) {
   return String(env[REQUIRED_TOKEN_VAR] || "").trim()
     ? []
     : [REQUIRED_TOKEN_VAR];
+}
+
+/**
+ * Ori / Grok Bot: map OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN.
+ * Never logs values. Does not overwrite an already-set MERCURY_API_TOKEN.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function applyOforicaTokenAlias(env = process.env) {
+  const next = { ...env };
+  if (
+    !String(next[REQUIRED_TOKEN_VAR] || "").trim() &&
+    String(next[OFORICA_TOKEN_ALIAS_VAR] || "").trim()
+  ) {
+    next[REQUIRED_TOKEN_VAR] = next[OFORICA_TOKEN_ALIAS_VAR];
+  }
+  return next;
 }
 
 /**

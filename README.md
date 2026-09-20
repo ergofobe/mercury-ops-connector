@@ -1,10 +1,17 @@
 # mercury-ops-connector
 
-Complementary **Mercury Banking write MCP** (stdio) for Books money movement: send money, queue approvals, internal transfers, recipients, and post-send category.
+**Oforica-scoped Mercury Banking read+write MCP** (stdio) via REST and `MERCURY_API_TOKEN`. Complements the stock Cursor Mercury OAuth plugin, which stays **OG Holdings-only** and must not be modified here.
 
-**Keep [stock Mercury MCP](https://docs.mercury.com/docs/supported-tools-on-mercury-mcp) for reads** — accounts, balances, transactions, recipients, `listCategories`, `listSendMoneyApprovalRequests`. This plugin does not replace or duplicate that surface.
+Not an official Mercury product. **No Cursor Marketplace publish.** Owner decides later.
 
-Not an official Mercury product. **No Cursor Marketplace publish.** Owner decides later. Do not merge or install from this scaffold until Jim reviews.
+## Two Mercury MCPs (do not merge them)
+
+| Plugin | Org | Auth | Surface |
+| --- | --- | --- | --- |
+| **Stock Cursor Mercury** | OG Holdings only | OAuth multi-account | Reads (accounts, txns, recipients, …). **Do not modify.** OAuth cannot see Oforica. |
+| **This plugin** (`mercury-ops`; Grok Bot AddMcpServer name **`mercury-ops-oforica`**) | Oforica (token org) | `MERCURY_API_TOKEN` (Bearer `secret-token:…`) | **Reads and writes** for that org. |
+
+Stock Mercury OAuth multi-account cannot see the Oforica organization. Oforica uses API-token REST. Keep both installed; this connector is the Oforica surface.
 
 ## File tree
 
@@ -15,10 +22,10 @@ Not an official Mercury product. **No Cursor Marketplace publish.** Owner decide
 ├── skills/mercury-ops/SKILL.md
 ├── src/
 │   ├── index.js                 # stdio entry
-│   ├── server.js                # MCP JSON-RPC + eight tools
+│   ├── server.js                # MCP JSON-RPC + read/write tools
 │   ├── mercury.js               # fetch + request shapes + validation
 │   └── secrets.js               # token check + redaction
-├── scripts/run-mcp-from-box-secrets.mjs  # Grok Bot note — Consola wires token later; do not install MCP
+├── scripts/run-mcp-from-box-secrets.mjs  # Grok Bot launcher; Ori maps OFORICA_MERCURY_API_TOKEN
 ├── test/                        # mocked; no live Mercury, no real money movement
 ├── assets/logo.svg
 ├── package.json
@@ -30,18 +37,30 @@ No rules, hooks, agents, or commands.
 
 ## Tools
 
+### Reads (Oforica / token org)
+
+| Tool | Mercury API | Notes |
+| --- | --- | --- |
+| `list_accounts` | `GET /accounts` | [getAccounts](https://docs.mercury.com/reference/getaccounts.md). Cursor: `limit`, `order`, `start_after`, `end_before`. Returns `id`, `name`, balances, `status`, `kind`, `legalBusinessName`, … |
+| `get_account` | `GET /account/{accountId}` | [getAccount](https://docs.mercury.com/reference/getaccount.md). |
+| `list_transactions` | `GET /transactions` | [listTransactions](https://docs.mercury.com/reference/listtransactions.md). Org-level; optional `accountId` (repeatable). Prefer `postedStart` / `postedEnd` for dashboard dates. Paginate with `page.nextPage` → `start_after`. |
+| `get_transaction` | `GET /transaction/{transactionId}` | [getTransactionById](https://docs.mercury.com/reference/gettransactionbyid.md). |
+| `list_recipients` | `GET /recipients` | [getRecipients](https://docs.mercury.com/reference/getrecipients.md). Prefer this over `get_recipient` when browsing. |
+| `get_recipient` | `GET /recipient/{id}` | One payee (confirm routing before send). |
+| `list_categories` | `GET /categories` | Custom categories for `update_transaction_category`. |
+
+### Writes
+
 | Tool | Mercury API | Notes |
 | --- | --- | --- |
 | `send_money` | `POST /account/{accountId}/transactions` | Immediate send. `paymentMethod`: `ach` \| `check` \| `domesticWire`. Requires Send Money scope **and IP whitelist**. |
-| `request_send_money` | `POST /account/{accountId}/request-send-money` | Approval queue. Same money fields; `paymentMethod` may include `internationalWire`. May **not** need IP whitelist. |
+| `request_send_money` | `POST /account/{accountId}/request-send-money` | **Prefer this.** Approval queue. Same money fields; `paymentMethod` may include `internationalWire`. May **not** need IP whitelist. |
 | `transfer_money` | `POST /transfer` | Internal transfer (`createInternalTransfer`). |
 | `request_transfer_money` | `POST /request-transfer` | Internal transfer approval queue ([requestTransferMoney](https://docs.mercury.com/reference/requesttransfermoney.md)). |
 | `create_recipient` | `POST /recipients` | [createRecipient](https://docs.mercury.com/reference/createrecipient.md). |
-| `get_recipient` | `GET /recipient/{id}` | Thin read for write UX only. Prefer stock `getRecipient`. |
-| `list_categories` | `GET /categories` | Thin convenience for `update_transaction_category`. **Prefer stock `listCategories`.** |
 | `update_transaction_category` | `PATCH /transaction/{transactionId}` | [updateTransaction](https://docs.mercury.com/reference/updatetransaction.md). Set category (optional note) **after** a send. |
 
-`get_account` is **not** included. Use stock Mercury `getAccounts` / `getAccount` for balances.
+Approval gates live **outside** this connector. Prefer `request_*` unless an immediate send is explicitly authorized.
 
 ### Required fields
 
@@ -52,6 +71,8 @@ No rules, hooks, agents, or commands.
 **`create_recipient`:** `name`, `emails`. Optional routing: `electronicRoutingInfo` (ACH), `domesticWireRoutingInfo`, `checkInfo`.
 
 **`update_transaction_category`:** `transactionId`, `categoryId`. Optional: `note`.
+
+**`get_account`:** `accountId`. **`get_transaction`:** `transactionId`. **`get_recipient`:** `recipientId`.
 
 `createTransaction` does **not** accept `categoryId` in the OpenAPI body. Categorize after the send.
 
@@ -69,8 +90,9 @@ The Mercury dashboard token **includes** the `secret-token:` prefix. Store the f
 
 ### Mint a token (Jim)
 
-1. Mercury → organization menu → **All Settings** → **Tokens**.
+1. Mercury → **Oforica** organization menu → **All Settings** → **Tokens**.
 2. **Create an API Token**. Prefer a **Custom** token with the fewest scopes:
+   - **Read** scopes for accounts, transactions, and recipients.
    - **Send Money** — `createTransaction` (`send_money`). **Needs an IP whitelist.**
    - **Request send money / Request transfer money** — approval-queue tools. **May not need an IP whitelist** (dashboard approval is the control).
    - Recipients + transaction metadata if you will create payees and set categories.
@@ -81,9 +103,27 @@ If you cannot get a static egress IP, use `request_send_money` / `request_transf
 
 `mcp.json` injects `${MERCURY_API_TOKEN}` into the Node process. The server does not read tokens from argv or files.
 
+## Grok Bot / Ori install
+
+Do **not** Marketplace-publish. Suggested **AddMcpServer** name: **`mercury-ops-oforica`**.
+
+- Process env the connector reads: **`MERCURY_API_TOKEN`**.
+- Ori maps **`OFORICA_MERCURY_API_TOKEN` → `MERCURY_API_TOKEN`** in `scripts/run-mcp-from-box-secrets.mjs` (never logs either value).
+- Stock Mercury OAuth plugin stays installed for OG Holdings reads.
+
 ## Known Mercury API gaps (QBO / Books)
 
 Documented here so agents do not invent fields or endpoints.
+
+### Two list-transaction paths
+
+- **Wrapped:** `GET /transactions` (org-level, cursor `start_after` / `end_before` / `start_at`, optional `accountId[]`).
+- **Not wrapped:** `GET /account/{accountId}/transactions` ([listAccountTransactions](https://docs.mercury.com/reference/listaccounttransactions.md)) uses **offset** pagination and a default 30-day window. Filter `list_transactions` with `accountId` instead.
+
+### Two get-transaction paths
+
+- **Wrapped:** `GET /transaction/{transactionId}` (`getTransactionById`).
+- **Not wrapped:** `GET /account/{accountId}/transaction/{transactionId}` (`getTransaction`). Id is enough.
 
 ### Category is not on create
 
@@ -108,7 +148,7 @@ Do not invent a `/transfer-to-external` path. Use `create_recipient` + `send_mon
 
 ### What this plugin will not wrap
 
-Stock Mercury already covers: accounts, cards, treasury, txn lists, recipient lists, approval-request lists, invoices, webhooks, users. International-wire **recipient setup** is typically a [recipient invite](https://docs.mercury.com/reference/createrecipientinvite.md) or the dashboard — not invented here.
+Cards, treasury, invoices, webhooks, users, approval-request **lists**, recipient invites. International-wire **recipient setup** is typically a [recipient invite](https://docs.mercury.com/reference/createrecipientinvite.md) or the dashboard — not invented here. Approval-request reads stay on the stock OG Holdings MCP or the Mercury dashboard for Oforica.
 
 ## Implementation
 
@@ -116,14 +156,14 @@ Stock Mercury already covers: accounts, cards, treasury, txn lists, recipient li
 
 Jim / agent approval gates live **outside** this connector. `request_*` only enqueues Mercury dashboard review.
 
-`scripts/run-mcp-from-box-secrets.mjs` is a **note / thin wrapper** for a later Grok Bot. Consola will wire `MERCURY_API_TOKEN`. Do **not** install this MCP from that script.
+`scripts/run-mcp-from-box-secrets.mjs` is the Grok Bot launcher. Ori maps `OFORICA_MERCURY_API_TOKEN` → `MERCURY_API_TOKEN`. The script never prints the token.
 
-## Install in Cursor (when Jim is ready — not this PR)
+## Install in Cursor (when Jim is ready)
 
 1. Clone this repository (or add it as a plugin source). **Do not Marketplace-install.**
-2. **Plugins → Configure** → set **Mercury API token**.
-3. Restart / reinstall the MCP server so `tools/list` picks up the eight tools.
-4. Keep stock Mercury MCP enabled for reads.
+2. **Plugins → Configure** → set **Mercury API token** (Oforica token).
+3. Restart / reinstall the MCP server so `tools/list` picks up reads + writes.
+4. Keep stock Mercury MCP enabled for **OG Holdings** OAuth reads.
 
 Requires **Node 18+**. There is no `npm install`.
 
@@ -135,7 +175,8 @@ npm test
 
 Requires Node 18+. All `fetch` calls are mocked. Coverage:
 
-- Each write tool request shape (path, method, required fields)
+- Each read and write tool request shape (path, method, required fields)
+- `list_transactions` uses `GET /transactions` (not the per-account offset path)
 - `Authorization` is `Bearer` with `secret-token:` prefix; tool results and errors never echo the token
 - `idempotencyKey` required on all money-movement tools
 - `update_transaction_category` PATCH body (`categoryId`, optional `note`)
@@ -148,18 +189,19 @@ CI runs `npm test` only. No production token, no sandbox send, no real money mov
 
 Do this after Configure is filled. **Do not send or transfer money** in smoke or CI.
 
-1. Token minted; value starts with `secret-token:`; stored only in Plugins → Configure.
-2. Restart the MCP server. Ask: *List mercury-ops tools.* Expect the eight names above — not stock `getAccounts` / `listTransactions`.
+1. Token minted for **Oforica**; value starts with `secret-token:`; stored only in Plugins → Configure.
+2. Restart the MCP server. Ask: *List mercury-ops tools.* Expect the read + write names above. `list_accounts` should show Oforica / `legalBusinessName`, not OG Holdings.
 3. `npm test` is green on a clean checkout (no `MERCURY_API_TOKEN` required for tests).
-4. Optional thin read (still not a send): stock Mercury `getAccounts` + this plugin `list_categories` / `get_recipient` on a **known** id. Confirm the token works. Stop there.
+4. Optional thin read (still not a send): `list_accounts` + `list_recipients` / `get_recipient` on a **known** id. Confirm the token works. Stop there.
 5. If a write path must be proven later (Jim only, not CI): use **`request_send_money`** for a tiny amount so it sits in the Mercury approval queue and can be **rejected**. Never use `send_money` as a first smoke.
 
 ## Non-goals
 
-- Full Mercury replacement (reads, cards, treasury, invoices, webhooks)
+- Replacing or modifying the stock Cursor Mercury OAuth MCP (OG Holdings)
 - Marketplace / cursor.directory publish
 - Live sends in tests or CI
 - Implementing Jim/agent approval policy inside the connector
+- Cards, treasury, invoices, webhooks, approval-request list tools
 
 ## License
 

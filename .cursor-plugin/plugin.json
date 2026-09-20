@@ -1,8 +1,8 @@
 {
   "name": "mercury-ops",
-  "displayName": "Mercury Ops (write)",
-  "version": "1.0.0",
-  "description": "Complementary Mercury Banking write MCP for Books money movement (send, transfer, recipients, post-send category). Keep stock Mercury MCP for reads. Do not publish to Marketplace.",
+  "displayName": "Mercury Ops (Oforica R/W)",
+  "version": "1.1.0",
+  "description": "Oforica-scoped Mercury Banking read+write MCP (API token REST). Stock Cursor Mercury OAuth plugin stays OG Holdings-only. Do not publish to Marketplace.",
   "author": {
     "name": "Oberon"
   },
@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": [
     "mercury",
+    "oforica",
     "banking",
     "send-money",
     "transfer",

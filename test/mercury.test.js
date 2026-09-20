@@ -4,6 +4,7 @@ import {
   MAX_AMOUNT,
   MAX_NOTE_CHARS,
   buildCreateRecipientBody,
+  buildListTransactionsQuery,
   buildSendMoneyBody,
   buildTransferBody,
   buildUpdateTransactionBody,
@@ -275,6 +276,118 @@ describe("create_recipient request shape", () => {
   it("requires name and emails before fetch", async () => {
     await assert.throws(() => buildCreateRecipientBody({ emails: ["a@b.com"] }), /name is required/);
     await assert.throws(() => buildCreateRecipientBody({ name: "Acme" }), /emails is required/);
+  });
+});
+
+describe("list_accounts request shape", () => {
+  it("GETs /accounts with cursor pagination", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("list_accounts", { limit: 25, order: "desc" });
+    const inspected = lastInspect(calls);
+    assert.equal(inspected.method, "GET");
+    assert.equal(inspected.path, "/accounts");
+    assert.equal(inspected.query.limit, "25");
+    assert.equal(inspected.query.order, "desc");
+    assert.equal(inspected.body, null);
+    assertBearerAuth(inspected, calls);
+  });
+});
+
+describe("get_account request shape", () => {
+  it("GETs /account/{id} with Bearer auth", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("get_account", { accountId: ACCOUNT });
+    const inspected = lastInspect(calls);
+    assert.equal(inspected.method, "GET");
+    assert.equal(inspected.path, `/account/${ACCOUNT}`);
+    assert.equal(inspected.body, null);
+    assertBearerAuth(inspected, calls);
+  });
+
+  it("requires accountId before fetch", async () => {
+    const { calls, runTool } = mockClient();
+    await assert.rejects(() => runTool("get_account", {}), /accountId is required/);
+    assert.equal(calls.length, 0);
+  });
+});
+
+describe("list_transactions request shape", () => {
+  it("GETs org-level /transactions with account and posted date filters", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("list_transactions", {
+      accountId: ACCOUNT,
+      postedStart: "2026-08-01",
+      postedEnd: "2026-08-31",
+      limit: 100,
+      order: "desc",
+      status: "sent",
+    });
+    const inspected = lastInspect(calls);
+    assert.equal(inspected.method, "GET");
+    assert.equal(inspected.path, "/transactions");
+    assert.equal(inspected.query.accountId, ACCOUNT);
+    assert.equal(inspected.query.postedStart, "2026-08-01");
+    assert.equal(inspected.query.postedEnd, "2026-08-31");
+    assert.equal(inspected.query.limit, "100");
+    assert.equal(inspected.query.order, "desc");
+    assert.equal(inspected.query.status, "sent");
+    assert.equal(inspected.body, null);
+    assertBearerAuth(inspected, calls);
+  });
+
+  it("repeats accountId query params for multiple accounts", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("list_transactions", {
+      accountId: [ACCOUNT, DEST],
+      status: ["sent", "pending"],
+    });
+    const inspected = lastInspect(calls);
+    assert.deepEqual(inspected.query.accountId, [ACCOUNT, DEST]);
+    assert.deepEqual(inspected.query.status, ["sent", "pending"]);
+  });
+
+  it("rejects combined cursors and invalid dates before fetch", () => {
+    assert.throws(
+      () =>
+        buildListTransactionsQuery({
+          start_after: TXN,
+          end_before: CATEGORY,
+        }),
+      /cannot be combined/
+    );
+    assert.throws(
+      () => buildListTransactionsQuery({ postedStart: "last-month" }),
+      /postedStart must be YYYY-MM-DD/
+    );
+    assert.throws(
+      () => buildListTransactionsQuery({ status: "posted" }),
+      /status must be one of/
+    );
+  });
+});
+
+describe("get_transaction request shape", () => {
+  it("GETs /transaction/{id}", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("get_transaction", { transactionId: TXN });
+    const inspected = lastInspect(calls);
+    assert.equal(inspected.method, "GET");
+    assert.equal(inspected.path, `/transaction/${TXN}`);
+    assert.equal(inspected.body, null);
+    assertBearerAuth(inspected, calls);
+  });
+});
+
+describe("list_recipients request shape", () => {
+  it("GETs /recipients with cursor pagination", async () => {
+    const { calls, runTool } = mockClient();
+    await runTool("list_recipients", { limit: 40, start_after: RECIPIENT });
+    const inspected = lastInspect(calls);
+    assert.equal(inspected.method, "GET");
+    assert.equal(inspected.path, "/recipients");
+    assert.equal(inspected.query.limit, "40");
+    assert.equal(inspected.query.start_after, RECIPIENT);
+    assertBearerAuth(inspected, calls);
   });
 });
 

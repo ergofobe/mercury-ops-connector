@@ -1,7 +1,7 @@
 /**
- * Thin Mercury Banking write helpers (Node 18+ fetch).
- * Zero npm runtime deps. Complements stock Mercury MCP — do not wrap
- * account/txn/recipient *lists* or approval-request reads here.
+ * Thin Mercury Banking REST helpers (Node 18+ fetch).
+ * Zero npm runtime deps. Oforica-scoped read+write via MERCURY_API_TOKEN.
+ * Stock Cursor Mercury OAuth MCP stays OG Holdings-only and is not used here.
  */
 
 import { requireApiToken, safeErrorMessage } from "./secrets.js";
@@ -52,15 +52,29 @@ export const MAX_IDEMPOTENCY_CHARS = 256;
 export const MAX_AMOUNT = 10_000_000;
 export const MIN_AMOUNT = 0.01;
 
+export const TRANSACTION_STATUSES = [
+  "pending",
+  "sent",
+  "cancelled",
+  "failed",
+  "reversed",
+  "blocked",
+];
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+
 const ALLOWED_PATHS = [
+  /^\/accounts$/,
+  /^\/account\/[^/]+$/,
   /^\/account\/[^/]+\/transactions$/,
   /^\/account\/[^/]+\/request-send-money$/,
+  /^\/transactions$/,
+  /^\/transaction\/[^/]+$/,
   /^\/transfer$/,
   /^\/request-transfer$/,
   /^\/recipients$/,
   /^\/recipient\/[^/]+$/,
   /^\/categories$/,
-  /^\/transaction\/[^/]+$/,
 ];
 
 export class MercuryError extends Error {
@@ -455,9 +469,13 @@ export function buildUpdateTransactionBody(args) {
 }
 
 /**
+ * Cursor pagination shared by GET /accounts, /recipients, /categories, /transactions.
+ *
  * @param {unknown} args
+ * @param {{ allowStartAt?: boolean }} [opts]
+ * @returns {Record<string, string>}
  */
-export function buildListCategoriesQuery(args) {
+export function buildCursorQuery(args, opts = {}) {
   const input = args && typeof args === "object" ? args : {};
   /** @type {Record<string, string>} */
   const query = {};
@@ -475,13 +493,130 @@ export function buildListCategoriesQuery(args) {
   }
   const startAfter = optionalString(input.start_after ?? input.startAfter, "start_after");
   const endBefore = optionalString(input.end_before ?? input.endBefore, "end_before");
-  if (startAfter && endBefore) {
-    throw new MercuryError("start_after and end_before cannot be combined", {
-      code: "validation",
-    });
+  const startAt = opts.allowStartAt
+    ? optionalString(input.start_at ?? input.startAt, "start_at")
+    : undefined;
+  const cursors = [startAfter, endBefore, startAt].filter(Boolean);
+  if (cursors.length > 1) {
+    throw new MercuryError(
+      opts.allowStartAt
+        ? "start_at, start_after, and end_before cannot be combined"
+        : "start_after and end_before cannot be combined",
+      { code: "validation" }
+    );
   }
   if (startAfter) query.start_after = startAfter;
   if (endBefore) query.end_before = endBefore;
+  if (startAt) query.start_at = startAt;
+  return query;
+}
+
+/**
+ * @param {unknown} args
+ */
+export function buildListCategoriesQuery(args) {
+  return buildCursorQuery(args);
+}
+
+/**
+ * @param {unknown} args
+ */
+export function buildListAccountsQuery(args) {
+  return buildCursorQuery(args);
+}
+
+/**
+ * @param {unknown} args
+ */
+export function buildListRecipientsQuery(args) {
+  return buildCursorQuery(args);
+}
+
+/**
+ * YYYY-MM-DD or ISO 8601 datetime, matching Mercury listTransactions.
+ *
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {string|undefined}
+ */
+export function optionalDate(value, name) {
+  const text = optionalString(value, name, { max: 64 });
+  if (text === undefined) return undefined;
+  if (!ISO_DATE.test(text)) {
+    throw new MercuryError(
+      `${name} must be YYYY-MM-DD or an ISO 8601 datetime`,
+      { code: "validation" }
+    );
+  }
+  return text;
+}
+
+/**
+ * Accept an array, a single string, or a comma-separated string.
+ *
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {string[]|undefined}
+ */
+export function optionalRepeatableIds(value, name) {
+  if (value == null || value === "") return undefined;
+  const list = Array.isArray(value)
+    ? value
+    : String(value)
+        .split(",")
+        .map((part) => part.trim());
+  const ids = list.map((item) => String(item || "").trim()).filter(Boolean);
+  if (ids.length === 0) return undefined;
+  for (const id of ids) {
+    requireString(id, name, { max: 256 });
+  }
+  return ids;
+}
+
+/**
+ * GET /transactions (listTransactions) query. Org-level; optional accountId filter.
+ * Alternate Mercury path GET /account/{accountId}/transactions (offset pagination)
+ * is not wrapped — use accountId here instead.
+ *
+ * @param {unknown} args
+ * @returns {Record<string, string | string[]>}
+ */
+export function buildListTransactionsQuery(args) {
+  const input = args && typeof args === "object" ? args : {};
+  /** @type {Record<string, string | string[]>} */
+  const query = { ...buildCursorQuery(input, { allowStartAt: true }) };
+
+  const search = optionalString(input.search, "search", { max: MAX_NOTE_CHARS });
+  if (search) query.search = search;
+
+  const start = optionalDate(input.start, "start");
+  const end = optionalDate(input.end, "end");
+  const postedStart = optionalDate(input.postedStart ?? input.posted_start, "postedStart");
+  const postedEnd = optionalDate(input.postedEnd ?? input.posted_end, "postedEnd");
+  if (start) query.start = start;
+  if (end) query.end = end;
+  if (postedStart) query.postedStart = postedStart;
+  if (postedEnd) query.postedEnd = postedEnd;
+
+  const mercuryCategory = optionalString(input.mercuryCategory, "mercuryCategory");
+  if (mercuryCategory) query.mercuryCategory = mercuryCategory;
+  const categoryId = optionalString(input.categoryId, "categoryId");
+  if (categoryId) query.categoryId = categoryId;
+
+  const statuses = optionalRepeatableIds(input.status, "status");
+  if (statuses) {
+    for (const status of statuses) {
+      requireEnum(status, TRANSACTION_STATUSES, "status");
+    }
+    query.status = statuses;
+  }
+
+  const accountIds = optionalRepeatableIds(input.accountId, "accountId");
+  if (accountIds) query.accountId = accountIds;
+
+  const cardIds = optionalRepeatableIds(input.cardId, "cardId");
+  if (cardIds) query.cardId = cardIds;
+
   return query;
 }
 
@@ -504,12 +639,23 @@ export function inspectMercuryCall(call) {
       body = null;
     }
   }
+  /** @type {Record<string, string | string[]>} */
+  const query = {};
+  for (const [key, value] of parsed.searchParams.entries()) {
+    if (query[key] === undefined) {
+      query[key] = value;
+    } else if (Array.isArray(query[key])) {
+      query[key].push(value);
+    } else {
+      query[key] = [query[key], value];
+    }
+  }
   return {
     url,
     method: String(init.method || "GET").toUpperCase(),
     path: apiPath,
     fullPath: parsed.pathname,
-    query: Object.fromEntries(parsed.searchParams.entries()),
+    query,
     authScheme: auth.startsWith("Bearer ") ? "Bearer" : "",
     authHasSecretPrefix: auth.startsWith("Bearer secret-token:"),
     contentType: String(headers["Content-Type"] || headers["content-type"] || ""),
@@ -528,7 +674,7 @@ export function createMercuryClient({
 } = {}) {
   /**
    * @param {string} pathname
-   * @param {{ method?: string, query?: Record<string, string>, json?: unknown }} [opts]
+   * @param {{ method?: string, query?: Record<string, string | string[]>, json?: unknown }} [opts]
    */
   async function mercuryFetch(pathname, opts = {}) {
     const token = requireApiToken(env);
@@ -539,7 +685,11 @@ export function createMercuryClient({
     if (opts.query) {
       for (const [key, value] of Object.entries(opts.query)) {
         if (value === undefined || value === null || value === "") continue;
-        url.searchParams.set(key, String(value));
+        const values = Array.isArray(value) ? value : [value];
+        for (const item of values) {
+          if (item === undefined || item === null || item === "") continue;
+          url.searchParams.append(key, String(item));
+        }
       }
     }
 
@@ -585,6 +735,50 @@ export function createMercuryClient({
   }
 
   return {
+    /**
+     * GET /accounts (getAccounts). Cursor-paginated.
+     */
+    async listAccounts(args) {
+      const query = buildListAccountsQuery(args);
+      return mercuryFetch("/accounts", { query });
+    },
+
+    /**
+     * GET /account/{accountId} (getAccount).
+     */
+    async getAccount(args) {
+      const accountId = requireString(args && args.accountId, "accountId");
+      return mercuryFetch(`/account/${encodeURIComponent(accountId)}`);
+    },
+
+    /**
+     * GET /transactions (listTransactions). Org-level with optional accountId[].
+     */
+    async listTransactions(args) {
+      const query = buildListTransactionsQuery(args);
+      return mercuryFetch("/transactions", { query });
+    },
+
+    /**
+     * GET /transaction/{transactionId} (getTransactionById).
+     * Alternate GET /account/{accountId}/transaction/{transactionId} is not wrapped.
+     */
+    async getTransaction(args) {
+      const transactionId = requireString(
+        args && args.transactionId,
+        "transactionId"
+      );
+      return mercuryFetch(`/transaction/${encodeURIComponent(transactionId)}`);
+    },
+
+    /**
+     * GET /recipients (getRecipients). Cursor-paginated.
+     */
+    async listRecipients(args) {
+      const query = buildListRecipientsQuery(args);
+      return mercuryFetch("/recipients", { query });
+    },
+
     /**
      * POST /account/{accountId}/transactions (createTransaction).
      * Requires Send Money scope + IP whitelist.
@@ -636,8 +830,7 @@ export function createMercuryClient({
     },
 
     /**
-     * GET /recipient/{id} — thin read for write UX only.
-     * Prefer stock Mercury getRecipient / getRecipients when listing.
+     * GET /recipient/{id} (getRecipient).
      */
     async getRecipient(args) {
       const recipientId = requireString(args && args.recipientId, "recipientId");
@@ -645,8 +838,7 @@ export function createMercuryClient({
     },
 
     /**
-     * GET /categories — convenience for update_transaction_category.
-     * Prefer stock Mercury listCategories when browsing.
+     * GET /categories — Mercury custom categories for update_transaction_category.
      */
     async listCategories(args) {
       const query = buildListCategoriesQuery(args);
