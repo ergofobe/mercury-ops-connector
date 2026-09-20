@@ -42,7 +42,7 @@ This connector does not approve, reject, or auto-release queued payments.
 
 ## Auth
 
-`MERCURY_API_TOKEN` (API-token org dashboard token, including `secret-token:`). In Cursor, set it under plugin Configure. The Grok Bot box secrets launcher may map an org-scoped alias (see README “Multi-org install example”) onto `MERCURY_API_TOKEN`. Never ask anyone to paste the token into chat. Never log it.
+`MERCURY_API_TOKEN` (API-token org dashboard token, including `secret-token:`). Set it in the host's secret/env configuration (in Cursor: plugin Configure). The secrets-in-env launcher (`scripts/run-mcp-from-box-secrets.mjs`) may map an org-scoped alias (see README “Multi-org install example”) onto `MERCURY_API_TOKEN`. Never ask anyone to paste the token into chat. Never log it.
 
 ## Workflow
 

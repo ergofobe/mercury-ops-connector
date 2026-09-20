@@ -86,9 +86,9 @@ Do not pass the token on argv. The process never prints it.
 
 `.cursor-plugin/plugin.json` + `mcp.json` wire `${MERCURY_API_TOKEN}` and optional `${MERCURY_OPS_ALLOW_SPEND}` into the Node process. Display name is **Mercury Ops**. Keep the stock Mercury OAuth plugin if you still need OAuth-org reads.
 
-### Grok Bot box secrets launcher
+### Secrets-in-env launcher (any host)
 
-`scripts/run-mcp-from-box-secrets.mjs` starts the same stdio server after secrets are already in the environment. It never prints the token.
+`scripts/run-mcp-from-box-secrets.mjs` starts the same stdio server after a host has injected secrets into the environment, mapping an org-scoped alias onto `MERCURY_API_TOKEN` (see below). It never prints the token.
 
 ## Multi-org install example
 
@@ -98,7 +98,7 @@ When one host also runs the stock OAuth Mercury MCP, give this process a distinc
 | --- | --- |
 | MCP server id | `mercury-ops-oforica` |
 | Box secret | `OFORICA_MERCURY_API_TOKEN` |
-| Process env the server reads | `MERCURY_API_TOKEN` (mapped by the box secrets launcher) |
+| Process env the server reads | `MERCURY_API_TOKEN` (mapped by the secrets-in-env launcher) |
 | Spend flag | `MERCURY_OPS_ALLOW_SPEND` (still default off) |
 
 The stdio server itself only reads `MERCURY_API_TOKEN` and `MERCURY_OPS_ALLOW_SPEND`.

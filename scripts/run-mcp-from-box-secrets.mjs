@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Grok Bot box secrets launcher for Mercury Ops.
+ * Secrets-in-env launcher for Mercury Ops (any host that injects secrets as env vars).
  *
  * The stdio server reads MERCURY_API_TOKEN only. This wrapper maps
  * OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN when the org-scoped
