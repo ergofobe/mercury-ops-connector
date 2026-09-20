@@ -1,7 +1,7 @@
 /**
  * Thin Mercury Banking REST helpers (Node 18+ fetch).
- * Zero npm runtime deps. Oforica-scoped read+write via MERCURY_API_TOKEN.
- * Stock Cursor Mercury OAuth MCP stays OG Holdings-only and is not used here.
+ * Zero npm runtime deps. API-token org via MERCURY_API_TOKEN.
+ * Distinct from the stock Mercury OAuth MCP.
  */
 
 import { requireApiToken, safeErrorMessage } from "./secrets.js";
@@ -847,7 +847,7 @@ export function createMercuryClient({
 
     /**
      * PATCH /transaction/{transactionId} (updateTransaction).
-     * This is how Books pre-categorizes for QBO after a send.
+     * Set Mercury custom category after createTransaction (no categoryId on create).
      */
     async updateTransactionCategory(args) {
       const transactionId = requireString(

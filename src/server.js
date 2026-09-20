@@ -1,6 +1,6 @@
 /**
  * Minimal stdio MCP (newline-delimited JSON-RPC 2.0).
- * No @modelcontextprotocol/sdk — Oforica-scoped reads + writes over Mercury REST.
+ * No @modelcontextprotocol/sdk — Mercury Ops: API-token org reads + gated writes.
  */
 
 import { createMercuryClient } from "./mercury.js";
@@ -9,7 +9,7 @@ import { missingTokenVars, safeErrorMessage } from "./secrets.js";
 export const PROTOCOL_VERSION = "2025-03-26";
 export const SERVER_INFO = { name: "mercury-ops", version: "1.2.0" };
 
-/** Money-moving tools. Implemented, but gated off until Jim sets MERCURY_OPS_ALLOW_SPEND. */
+/** Money-moving tools. Implemented, but gated off until MERCURY_OPS_ALLOW_SPEND is set. */
 export const SPEND_TOOL_NAMES = [
   "send_money",
   "request_send_money",
@@ -36,7 +36,7 @@ export function isSpendAllowed(env = process.env) {
  */
 export function spendDisabledMessage(name) {
   const tool = name ? `${name} is` : "Spend tools are";
-  return `${tool} disabled until Jim enables ${SPEND_FLAG_VAR}=1. Human approval lives outside this connector.`;
+  return `${tool} disabled until ${SPEND_FLAG_VAR}=1 is set. Human approval lives outside this connector.`;
 }
 
 /**
@@ -130,7 +130,7 @@ export const TOOL_DEFS = [
   {
     name: "list_accounts",
     description:
-      "GET /accounts (getAccounts). Paginated Oforica accounts for the MERCURY_API_TOKEN org: id, name, nickname, availableBalance, currentBalance, status, kind, type, legalBusinessName, routing/account numbers, dashboardLink. Cursor params: limit, order, start_after, end_before. Stock Cursor Mercury OAuth MCP is OG Holdings-only and cannot see Oforica.",
+      "GET /accounts (getAccounts). Paginated accounts for the MERCURY_API_TOKEN org: id, name, nickname, availableBalance, currentBalance, status, kind, type, legalBusinessName, routing/account numbers, dashboardLink. Cursor params: limit, order, start_after, end_before. Distinct from the stock Mercury OAuth MCP.",
     inputSchema: {
       type: "object",
       properties: { ...CURSOR_PAGE_PROPS },
@@ -139,7 +139,7 @@ export const TOOL_DEFS = [
   {
     name: "get_account",
     description:
-      "GET /account/{accountId} (getAccount). One Oforica account by id (balances, status, kind, legalBusinessName, routing). Use list_accounts to discover ids.",
+      "GET /account/{accountId} (getAccount). One account by id in the API-token org (balances, status, kind, legalBusinessName, routing). Use list_accounts to discover ids.",
     inputSchema: {
       type: "object",
       properties: {
@@ -247,7 +247,7 @@ export const TOOL_DEFS = [
   {
     name: "send_money",
     description:
-      "POST /account/{accountId}/transactions (createTransaction). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1 (Jim must enable spend). Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money. Human approval lives OUTSIDE this connector.",
+      "POST /account/{accountId}/transactions (createTransaction). GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Sends ACH, check, or domesticWire immediately. Requires Send Money scope and an IP whitelist. Required: accountId, recipientId, amount, paymentMethod (ach|check|domesticWire), idempotencyKey. Optional: note, externalMemo, purpose (required for domesticWire). Does NOT accept categoryId — categorize AFTER the send with update_transaction_category. Prefer request_send_money. Human approval lives OUTSIDE this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -281,7 +281,7 @@ export const TOOL_DEFS = [
   {
     name: "request_send_money",
     description:
-      "POST /account/{accountId}/request-send-money. GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Prefer this over send_money when spend is enabled. Approval decisions are made in Mercury / by Jim — not by this connector.",
+      "POST /account/{accountId}/request-send-money. GATED: absent from tools/list unless MERCURY_OPS_ALLOW_SPEND=1. Queues a send for Mercury dashboard approval. Same money fields as send_money plus idempotencyKey. paymentMethod may include internationalWire (purpose required for domesticWire and internationalWire). Prefer this over send_money when spend is enabled. Approval decisions are made in Mercury — not by this connector.",
     inputSchema: {
       type: "object",
       properties: {
@@ -431,7 +431,7 @@ export const TOOL_DEFS = [
   {
     name: "update_transaction_category",
     description:
-      "PATCH /transaction/{transactionId} (updateTransaction). Set categoryId and optional note AFTER a send. createTransaction / PostTransactionAPIRequest has no categoryId or glAllocations — this is how Jim pre-categorizes for QBO sync. glAllocations (accounting-integration GL codes) are distinct from Mercury custom categories (categoryData) and are not set here. Internal transfers often auto-map in QBO as bank transfers; category may not apply the same way.",
+      "PATCH /transaction/{transactionId} (updateTransaction). Set categoryId and optional note AFTER a send. createTransaction / PostTransactionAPIRequest has no categoryId or glAllocations. glAllocations (accounting-integration GL codes) are distinct from Mercury custom categories (categoryData) and are not set here. Internal transfers often auto-map in QBO as bank transfers; category may not apply the same way.",
     inputSchema: {
       type: "object",
       properties: {

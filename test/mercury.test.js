@@ -70,7 +70,7 @@ describe("send_money request shape", () => {
       amount: 25.5,
       paymentMethod: "ach",
       idempotencyKey: "pay-jan-1",
-      note: "Books bill",
+      note: "Vendor bill",
       externalMemo: "Invoice 1042",
     });
     const inspected = lastInspect(calls);
@@ -81,7 +81,7 @@ describe("send_money request shape", () => {
       amount: 25.5,
       paymentMethod: "ach",
       idempotencyKey: "pay-jan-1",
-      note: "Books bill",
+      note: "Vendor bill",
       externalMemo: "Invoice 1042",
     });
     assert.equal(inspected.body.categoryId, undefined);

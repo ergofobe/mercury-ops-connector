@@ -24,7 +24,7 @@ export function missingTokenVars(env = process.env) {
 }
 
 /**
- * Ori / Grok Bot: map OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN.
+ * Grok Bot box secrets launcher: map OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN.
  * Never logs values. Does not overwrite an already-set MERCURY_API_TOKEN.
  *
  * @param {NodeJS.ProcessEnv} [env]

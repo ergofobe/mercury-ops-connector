@@ -1,24 +1,26 @@
 # mercury-ops-connector
 
-**Phase A** stdio MCP: Oforica-scoped Mercury Banking **reads + non-spend writes**, plus **gated** money-move tools. Auth is `MERCURY_API_TOKEN` (Bearer `secret-token:…`). Complements the stock Mercury OAuth MCP, which stays **OG Holdings-only** and is not modified here.
+**Mercury Ops** — Phase A stdio MCP for an **API-token Mercury org**: banking **reads + non-spend writes**, plus **gated** money-move tools. Auth is `MERCURY_API_TOKEN` (Bearer `secret-token:…`). Complements the stock Mercury OAuth MCP (separate org / OAuth reads). This repo does not replace or rename that plugin.
 
-Not an official Mercury product. **No Marketplace publish.**
+Not an official Mercury product. **No Marketplace publish.** Plugin id and process name: **`mercury-ops`** (display name **Mercury Ops**). Do not register this server as bare “Mercury”.
 
-**Phase B (follow-on PR):** Books/accounting — categories CRUD, receipt upload, invoices, statements. Do not fold those into this repo’s Phase A surface.
+**Phase B (follow-on PR):** accounting extras — categories CRUD, receipt upload, invoices, statements.
 
 ## Two Mercury MCPs
 
 | Surface | Org | Auth | Role |
 | --- | --- | --- | --- |
-| **Stock Mercury MCP** | OG Holdings only | OAuth | Reads. OAuth multi-account cannot see Oforica. Do not modify. |
-| **This server** (`mercury-ops` / suggested name **`mercury-ops-oforica`**) | Token org (Oforica) | `MERCURY_API_TOKEN` | Banking reads + non-spend writes. Spend tools exist in code but stay **off** until Jim enables them. |
+| **Stock Mercury MCP** | OAuth org (not the API-token org) | OAuth | Reads for that OAuth session. Do not modify. |
+| **Mercury Ops** (`mercury-ops`) | API-token org | `MERCURY_API_TOKEN` | Banking reads + non-spend writes. Spend tools stay **off** until `MERCURY_OPS_ALLOW_SPEND` is set. |
+
+The stock OAuth plugin cannot see the API-token org. Keep both if you need both orgs.
 
 ## Dual spend gate
 
 Money-move tools are **implemented but gated off by default**. Both layers must pass:
 
-1. **Execute refuse / hide:** `MERCURY_OPS_ALLOW_SPEND` unset/false → spend tools are **absent from `tools/list`** and `tools/call` returns a clear error (no Mercury request). Set to `1` / `true` / `yes` / `on` only after Jim explicitly enables spend.
-2. **Skill Jim-green:** even when the flag is on, agents must not send or transfer unless Jim has greened that spend. Human approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
+1. **Flag:** `MERCURY_OPS_ALLOW_SPEND` unset/false → spend tools are **absent from `tools/list`** and `tools/call` returns a clear error (no Mercury request). Set to `1` / `true` / `yes` / `on` only when an authorized operator enables spend.
+2. **Operator greenlight:** even when the flag is on, agents must not send or transfer unless a human has authorized that movement. Approval lives **outside** this connector (`request_*` only queues Mercury dashboard review).
 
 Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_transfer_money`.
 
@@ -48,7 +50,7 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | Tool | Mercury API |
 | --- | --- |
 | `send_money` | `POST /account/{accountId}/transactions` |
-| `request_send_money` | `POST /account/{accountId}/request-send-money` (prefer this if Jim greens spend) |
+| `request_send_money` | `POST /account/{accountId}/request-send-money` (prefer this when spend is enabled) |
 | `transfer_money` | `POST /transfer` |
 | `request_transfer_money` | `POST /request-transfer` |
 
@@ -61,7 +63,6 @@ Spend tools: `send_money`, `request_send_money`, `transfer_money`, `request_tran
 | `MERCURY_API_TOKEN` | yes | Dashboard token, including `secret-token:`. Never log or echo. If the prefix is missing, the server adds it. |
 | `MERCURY_OPS_ALLOW_SPEND` | no | Default off. `1`/`true`/`yes`/`on` advertises and executes spend tools. |
 | `MERCURY_API_BASE_URL` | no | Defaults to `https://api.mercury.com/api/v1`. |
-| `OFORICA_MERCURY_API_TOKEN` | no | Ori / Grok Bot launcher alias → `MERCURY_API_TOKEN`. |
 
 ```http
 Authorization: Bearer secret-token:<token-from-dashboard>
@@ -73,18 +74,34 @@ Node 18+. Zero runtime npm dependencies (`fetch` only).
 
 ```bash
 export MERCURY_API_TOKEN='secret-token:…'
-# leave MERCURY_OPS_ALLOW_SPEND unset until Jim enables spend
+# leave MERCURY_OPS_ALLOW_SPEND unset until spend is explicitly enabled
 node src/index.js
 ```
 
-JSON-RPC 2.0 on stdin/stdout (newline-delimited; Content-Length frames also accepted). Point any MCP host at that command. Suggested server name: **`mercury-ops-oforica`**.
+JSON-RPC 2.0 on stdin/stdout (newline-delimited; Content-Length frames also accepted). Point any MCP host at that command. Register the server as **`mercury-ops`**, not “Mercury”.
 
 Do not pass the token on argv. The process never prints it.
 
-### Host notes (not required)
+### Cursor plugin Configure
 
-- **Cursor plugin:** `.cursor-plugin/plugin.json` + `mcp.json` wire `${MERCURY_API_TOKEN}` and optional `${MERCURY_OPS_ALLOW_SPEND}`. Keep the stock Mercury OAuth plugin for OG Holdings.
-- **Grok Bot / Ori:** `scripts/run-mcp-from-box-secrets.mjs` maps `OFORICA_MERCURY_API_TOKEN` → `MERCURY_API_TOKEN`. Same spend flag.
+`.cursor-plugin/plugin.json` + `mcp.json` wire `${MERCURY_API_TOKEN}` and optional `${MERCURY_OPS_ALLOW_SPEND}` into the Node process. Display name is **Mercury Ops**. Keep the stock Mercury OAuth plugin if you still need OAuth-org reads.
+
+### Grok Bot box secrets launcher
+
+`scripts/run-mcp-from-box-secrets.mjs` starts the same stdio server after secrets are already in the environment. It never prints the token.
+
+## Multi-org install example
+
+When one host also runs the stock OAuth Mercury MCP, give this process a distinct server id and an org-scoped secret name that the launcher maps onto `MERCURY_API_TOKEN`:
+
+| Item | Example |
+| --- | --- |
+| MCP server id | `mercury-ops-oforica` |
+| Box secret | `OFORICA_MERCURY_API_TOKEN` |
+| Process env the server reads | `MERCURY_API_TOKEN` (mapped by the box secrets launcher) |
+| Spend flag | `MERCURY_OPS_ALLOW_SPEND` (still default off) |
+
+The stdio server itself only reads `MERCURY_API_TOKEN` and `MERCURY_OPS_ALLOW_SPEND`.
 
 ## Mercury API notes (Phase A)
 

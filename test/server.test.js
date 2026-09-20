@@ -137,7 +137,7 @@ describe("MCP surface", () => {
     });
     assert.equal(reply.result.isError, true);
     assert.match(reply.result.content[0].text, /MERCURY_OPS_ALLOW_SPEND=1/);
-    assert.match(reply.result.content[0].text, /disabled until Jim/);
+    assert.match(reply.result.content[0].text, /disabled until MERCURY_OPS_ALLOW_SPEND=1/);
     assert.equal(called, false);
   });
 
@@ -218,7 +218,7 @@ describe("createToolRunner wiring", () => {
           paymentMethod: "ach",
           idempotencyKey: "k",
         }),
-      /disabled until Jim enables MERCURY_OPS_ALLOW_SPEND=1/
+      /disabled until MERCURY_OPS_ALLOW_SPEND=1 is set/
     );
     assert.equal(called, false);
   });

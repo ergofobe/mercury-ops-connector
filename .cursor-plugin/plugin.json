@@ -1,8 +1,8 @@
 {
   "name": "mercury-ops",
-  "displayName": "Mercury Ops (Oforica R/W)",
+  "displayName": "Mercury Ops",
   "version": "1.2.0",
-  "description": "Oforica-scoped Mercury Banking read+write MCP (API token REST). Spend tools gated off until MERCURY_OPS_ALLOW_SPEND=1. Stock Cursor Mercury OAuth stays OG Holdings-only. Do not publish to Marketplace.",
+  "description": "Mercury Ops: API-token Mercury banking MCP (reads + gated spend). Distinct from the stock Mercury OAuth plugin. Do not publish to Marketplace.",
   "author": {
     "name": "Oberon"
   },
@@ -30,7 +30,7 @@
       "MERCURY_OPS_ALLOW_SPEND": {
         "type": "string",
         "title": "Allow spend tools",
-        "description": "Leave unset. Set to 1 only after Jim explicitly enables spend. Until then, send_money / request_send_money / transfer_money / request_transfer_money are hidden from tools/list. Human approval still lives outside this connector."
+        "description": "Leave unset (default). Set to 1 only when an authorized operator enables spend. Until then, send_money / request_send_money / transfer_money / request_transfer_money are hidden from tools/list. Human approval still lives outside this connector."
       }
     },
     "required": [

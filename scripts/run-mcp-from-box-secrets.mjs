@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /**
- * Grok Bot / Ori launcher.
+ * Grok Bot box secrets launcher for Mercury Ops.
  *
- * Suggested AddMcpServer name: mercury-ops-oforica
+ * The stdio server reads MERCURY_API_TOKEN only. This wrapper maps
+ * OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN when the org-scoped
+ * box secret is set (see README “Multi-org install example”).
+ * Never print either value.
  *
- * The stdio server reads MERCURY_API_TOKEN only. Ori maps
- * OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN here so box secrets can use
- * the org-scoped name. Never print either value.
- *
- * Spend stays off unless MERCURY_OPS_ALLOW_SPEND=1 (Jim enable).
- * Do **not** Marketplace-publish. Stock Mercury OAuth stays
- * OG Holdings-only; this process is the Oforica API-token org.
+ * Spend stays off unless MERCURY_OPS_ALLOW_SPEND=1.
+ * Do **not** Marketplace-publish. Register as mercury-ops (or
+ * mercury-ops-oforica when sharing a host with stock Mercury OAuth).
  *
  * Usage:
  *   node scripts/run-mcp-from-box-secrets.mjs
@@ -31,7 +30,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const missing = missingTokenVars(env);
 if (missing.length > 0) {
   process.stderr.write(
-    "mercury-ops-oforica: MERCURY_API_TOKEN is not set. Ori maps OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN. Do not Marketplace-publish.\n"
+    "mercury-ops: MERCURY_API_TOKEN is not set. The box secrets launcher maps OFORICA_MERCURY_API_TOKEN → MERCURY_API_TOKEN. Do not Marketplace-publish.\n"
   );
   process.exit(1);
 }
